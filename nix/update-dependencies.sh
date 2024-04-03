@@ -31,6 +31,4 @@ function prefetch-nixpkgs-channel () {
 }
 
 # lorri should always build with the current NixOS stable branch.
-prefetch-nixpkgs-channel "nixos-22.05" ./nix/nixpkgs-stable.json
-# lorri should also build with 22.05
-prefetch-nixpkgs-channel "nixos-22.05" ./nix/nixpkgs-22_05.json
+prefetch-nixpkgs-channel "nixos-23.11" ./nix/nixpkgs-stable.json
