@@ -10,9 +10,7 @@ use std::env;
 use std::path::{Path, PathBuf};
 use structopt::StructOpt;
 
-const TRIVIAL_SHELL_SRC: &str = include_str!("./trivial-shell.nix");
 const FLAKE_COMPAT_SHELL_SRC: &str = include_str!("./flake-compat-shell.nix");
-const DEFAULT_ENVRC: &str = include_str!("./default-envrc");
 
 fn main() {
     install_panic_handler();
@@ -84,7 +82,7 @@ fn find_nix_file(shellfile: &Path) -> Result<NixFile, ExitError> {
                     You can use the following minimal `shell.nix` to get started:\n\n\
                     {}",
                     shellfile.display(),
-                    TRIVIAL_SHELL_SRC
+                    ops::TRIVIAL_SHELL_SRC
                 )
             },
         )),
@@ -132,7 +130,7 @@ fn run_command(logger: &slog::Logger, opts: Arguments) -> Result<(), ExitError> 
             ops::daemon(opts, logger)
         }
         Command::Upgrade(opts) => ops::upgrade(opts, paths.cas_store(), logger),
-        Command::Init => ops::init(TRIVIAL_SHELL_SRC, DEFAULT_ENVRC, logger),
+        Command::Init => ops::init(logger),
 
         Command::Internal { command } => match command {
             Internal_::Ping_(opts) => {
@@ -189,7 +187,7 @@ mod tests {
         let out = std::process::Command::new("nix-instantiate")
             // we can’t assume to have a <nixpkgs>, so use bogus-nixpkgs
             .args(&["-I", &format!("nixpkgs={}", nixpkgs)])
-            .args(&["--expr", TRIVIAL_SHELL_SRC])
+            .args(&["--expr", ops::TRIVIAL_SHELL_SRC])
             .output()?;
         assert!(
             out.status.success(),

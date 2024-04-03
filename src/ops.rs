@@ -47,6 +47,11 @@ use crossbeam_channel as chan;
 use slog::{debug, info, warn};
 use thiserror::Error;
 
+/// `./trivial-shell.nix`
+pub const TRIVIAL_SHELL_SRC: &str = include_str!("./trivial-shell.nix");
+/// `./default-envrc`
+pub const DEFAULT_ENVRC: &str = include_str!("./default-envrc");
+
 /// Set up necessary directories or fail.
 pub fn get_paths() -> Result<crate::constants::Paths, error::ExitError> {
     crate::constants::Paths::initialize().map_err(|e| {
@@ -245,14 +250,10 @@ pub fn info(project: Project) -> Result<(), ExitError> {
 ///
 /// See the documentation for lorri::cli::Command::Init for
 /// more details
-pub fn init(
-    default_shell: &str,
-    default_envrc: &str,
-    logger: &slog::Logger,
-) -> Result<(), ExitError> {
+pub fn init(logger: &slog::Logger) -> Result<(), ExitError> {
     create_if_missing(
         Path::new("./shell.nix"),
-        default_shell,
+        TRIVIAL_SHELL_SRC,
         "Make sure shell.nix is of a form that works with nix-shell.",
         logger,
     )
@@ -260,8 +261,8 @@ pub fn init(
 
     create_if_missing(
         Path::new("./.envrc"),
-        default_envrc,
         "Please add 'eval \"$(lorri direnv)\"' to .envrc to set up lorri support.",
+        DEFAULT_ENVRC,
         logger,
     )
     .map_err(ExitError::user_error)?;
