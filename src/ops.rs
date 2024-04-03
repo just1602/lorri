@@ -261,8 +261,8 @@ pub fn init(logger: &slog::Logger) -> Result<(), ExitError> {
 
     create_if_missing(
         Path::new("./.envrc"),
-        "Please add 'eval \"$(lorri direnv)\"' to .envrc to set up lorri support.",
         DEFAULT_ENVRC,
+        &format!("Please add the following code to the top of your .envrc to set up lorri support (with fallback for plain nix):\n```bash\n{}```\n.", DEFAULT_ENVRC),
         logger,
     )
     .map_err(ExitError::user_error)?;
