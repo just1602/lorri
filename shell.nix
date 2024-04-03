@@ -71,7 +71,7 @@ pkgs.mkShell (
   {
     name = "lorri";
     buildInputs = buildInputs
-    ++ pkgs.lib.optionals isDevelopmentShell [ pkgs.rustracer ];
+    ++ pkgs.lib.optionals isDevelopmentShell [ ];
 
     inherit BUILD_REV_COUNT RUN_TIME_CLOSURE;
 
