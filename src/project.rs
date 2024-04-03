@@ -7,7 +7,9 @@ use crate::builder::{OutputPath, RootedPath};
 use crate::cas::ContentAddressable;
 use crate::{AbsPathBuf, NixFile};
 use std::ffi::OsString;
+use std::io;
 use std::os::unix::ffi::OsStrExt;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 /// A “project” knows how to handle the lorri state
@@ -120,27 +122,56 @@ where {
         // the reverse GC root that points from nix to our cache gc_roots dir
         // TODO: check nix state dir at startup, like USER.
         let nix_var_nix = || AbsPathBuf::new_unchecked(PathBuf::from("/nix/var/nix/"));
-        let nix_gc_root_user_dir = std::env::var_os("NIX_STATE_DIR")
+        let nix_gc_root_user_dir_root = std::env::var_os("NIX_STATE_DIR")
             .map_or_else(
                 || Ok(nix_var_nix()),
                 |path| AbsPathBuf::new(PathBuf::from(path)),
             )
             .unwrap_or_else(|_pb| nix_var_nix())
-            .join(PathBuf::from("gcroots/per-user"))
-            .join(user.0);
+            .join(PathBuf::from("gcroots/per-user"));
+        let nix_gc_root_user_dir = nix_gc_root_user_dir_root.join(&user.0);
 
         // The user directory sometimes doesn’t exist,
-        // but we can create it (it’s root but `rwxrwxrwx`)
+        // but we can create it for older nix versions (it’s root but `rwxrwxrwx`)
+        // Newer nix versions make the directory `rwxr-xr-x`, meaning we need the user to intervene.
         if !nix_gc_root_user_dir.as_path().is_dir() {
-            std::fs::create_dir_all(&nix_gc_root_user_dir.as_path()).map_err(|source| {
+            let meta = std::fs::metadata(&nix_gc_root_user_dir_root.as_path()).map_err(|source| {
                 AddRootError {
                     source,
+                    msg: format!("Cannot stat user roots directory for permission to create a new lorri user dir: {}", nix_gc_root_user_dir_root.display()),
+                }
+            })?;
+
+            // check whether we are allowed to create the directory
+            if 0 != (meta.permissions().mode() & nix::libc::S_IWOTH) {
+                std::fs::create_dir_all(&nix_gc_root_user_dir.as_path()).map_err(|source| {
+                    AddRootError {
+                        source,
+                        msg: format!(
+                            "Failed to create missing nix user gc directory: {}",
+                            nix_gc_root_user_dir.display()
+                        ),
+                    }
+                })?
+            } else {
+                Err(AddRootError {
+                    source: io::Error::new(io::ErrorKind::Other, "manual intervention required"),
                     msg: format!(
-                        "Failed to create missing nix user gc directory: {}",
+                        r###"\
+                        We cannot create a user dir for your user account in {}, because newer nix versions require sudo for this.
+
+                        Please run the following commands once to set up lorri:
+                        ```
+                        $ sudo mkdir {}
+                        $ sudo chown {} {}
+                        "###,
+                        nix_gc_root_user_dir_root.display(),
+                        nix_gc_root_user_dir.display(),
+                        &user.0.clone().to_string_lossy(),
                         nix_gc_root_user_dir.display()
                     ),
-                }
-            })?
+                })?
+            }
         }
 
         // We register a garbage collection root, which points back to our `~/.cache/lorri/gc_roots` directory,
