@@ -278,7 +278,7 @@ fn create_if_missing(
     logger: &slog::Logger,
 ) -> Result<(), io::Error> {
     if path.exists() {
-        info!(logger, "file already exists, skipping"; "path" => path.to_str(), "message" => msg);
+        info!(logger, "file {} already exists, skipping", path.display(); "path" => path.to_str(), "message" => msg);
         Ok(())
     } else {
         let mut f = File::create(path)?;
