@@ -1,41 +1,28 @@
 //! Helps instantiate a root slog logger
 
-use crate::cli::{Command, Verbosity};
+use crate::cli::Verbosity;
 use slog::Drain;
 
-/// Instantiate a root logger appropriate for the subcommand
-pub fn root(verbosity: Verbosity, command: &Command) -> slog::Logger {
+/// Instantiate a root logger
+pub fn root(verbosity: Verbosity) -> slog::Logger {
     let level = match verbosity {
         // log only up to info
         Verbosity::DefaultInfo => slog::Level::Info,
         // log everything; be advised that trace-messages are removed at compile time by default,
         // see https://docs.rs/slog/2.7.0/slog/#notable-details
+        // but Debug messages will stay around.
         Verbosity::Debug => slog::Level::Trace,
     };
-    let log_to = match command {
-        // direnv swallows stdout, so we must log to stderr
-        Command::Direnv(_) => LogTo::Stderr,
-        _ => LogTo::Stdout,
-    };
-    lorri_logger(level, log_to)
+    lorri_logger(level)
 }
 
 /// Logger that can be used in tests
 pub fn test_logger() -> slog::Logger {
-    lorri_logger(slog::Level::Trace, LogTo::Stderr)
+    lorri_logger(slog::Level::Trace)
 }
 
-/// output to log to
-enum LogTo {
-    Stdout,
-    Stderr,
-}
-
-fn lorri_logger(level: slog::Level, log_to: LogTo) -> slog::Logger {
-    let decorator = match log_to {
-        LogTo::Stderr => slog_term::TermDecorator::new().stderr().build(),
-        LogTo::Stdout => slog_term::TermDecorator::new().stdout().build(),
-    };
+fn lorri_logger(level: slog::Level) -> slog::Logger {
+    let decorator = slog_term::TermDecorator::new().stderr().build();
     let drain = slog_term::FullFormat::new(decorator)
         .build()
         .filter_level(level)

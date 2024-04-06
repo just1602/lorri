@@ -28,7 +28,7 @@ fn main() {
         // This logger is asynchronous. It is guaranteed to be flushed upon destruction. By tying
         // its lifetime to this smaller scope, we ensure that it is destroyed before
         // 'std::process::exit' gets called.
-        let logger = logging::root(verbosity, &opts.command);
+        let logger = logging::root(verbosity);
         debug!(logger, "input options"; "options" => ?opts);
 
         match run_command(&logger, opts) {
