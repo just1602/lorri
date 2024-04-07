@@ -22,6 +22,7 @@ let
       // getBins pkgs.bats [ "bats" ]
       // getBins pkgs.coreutils [ "test" "echo" "cat" "mkdir" "mv" "touch" ]
       // getBins pkgs.diffutils [ "diff" ]
+      // getBins pkgs.ninja [ "ninja" ]
       ;
 
   inherit (import ./sandbox.nix { inherit pkgs writeExecline; })
@@ -141,7 +142,7 @@ let
       test = writeExecline "lint-crate2nix" {}
         (pathPrependBins [pkgs.crate2nix]
         ++ [
-          "if" [ pkgs.runtimeShell "${LORRI_ROOT}/nix/update-nix.sh" ]
+          "if" [ bins.ninja "update-cargo-nix" ]
           bins.git "diff" "--exit-code"
         ]);
     };

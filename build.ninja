@@ -1,0 +1,22 @@
+builddir = .ninja
+
+build all : phony .github/workflows/ci.yml
+default all
+
+# show the graph of ninja build dependencies in zathura
+rule show-ninja-deps
+  command = ninja -t graph | dot -Tpdf | zathura -
+
+build show-ninja-deps: show-ninja-deps | build.ninja
+
+# create the ci.yml file for github actions
+rule build-ci-files
+  command = eval $$(nix-build $in -A writeConfig)
+
+build .github/workflows/ci.yml : build-ci-files ./.github/workflows/ci.nix ./Cargo.nix
+
+# update Cargo.nix from Cargo.toml
+rule update-cargo-nix
+  command = crate2nix generate --cargo-toml $in --output $out
+
+build ./Cargo.nix : update-cargo-nix ./Cargo.toml | ./Cargo.lock ./nix/nixpkgs-stable.json

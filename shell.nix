@@ -56,6 +56,7 @@ let
     pkgs.crate2nix
     pkgs.nix-prefetch-git
     pkgs.nixpkgs-fmt
+    pkgs.ninja
 
     # To ensure we always have a compatible nix in our shells.
     # CI doesn’t know `nix-env` otherwise.
@@ -66,6 +67,10 @@ let
     pkgs.darwin.apple_sdk.frameworks.CoreServices
     pkgs.darwin.apple_sdk.frameworks.CoreFoundation
     pkgs.libiconv
+  ]
+  ++ pkgs.lib.optionals isDevelopmentShell [
+    pkgs.graphviz
+    pkgs.zathura
   ];
 
 in
