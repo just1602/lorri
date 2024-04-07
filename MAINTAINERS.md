@@ -60,7 +60,7 @@ To cut a new release:
 
 1. Determine if this is a [minor or major release](#versioning-scheme) and
    change the `version` field in `Cargo.toml` accordingly.
-2. Build the project to update `Cargo.lock`, then run `ninja` to
+2. Build the project to update `Cargo.lock`, then run `ninja all` to
    update `Cargo.nix`.
 3. Go through all commits since the last release and cross-check against the
    release notes in `release.nix`. Add missing changes.
@@ -127,7 +127,7 @@ stable nixos version that is set in `./nix/update-nixpkgs.sh`.
 Afterwards, don’t forget to run `nix-shell` and `nix-build` to test
 whether everything still builds.
 
-Run `ninja` to update Cargo's dependency list.
+Run `ninja all` to update Cargo's dependency list.
 
 [nixos-stable-pr]: https://github.com/NixOS/nixpkgs/pull/77432
 [nixos-unstable-pr]: https://github.com/NixOS/nixpkgs/pull/77380

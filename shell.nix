@@ -19,6 +19,7 @@ let
       RUN_TIME_CLOSURE
       ;
   };
+  lib = import ./nix/lib { inherit pkgs; };
 
   # Lorri-specific
 
@@ -57,6 +58,7 @@ let
     pkgs.nix-prefetch-git
     pkgs.nixpkgs-fmt
     pkgs.ninja
+    (lib.binify { exe = lib.nix-run; name = "nix-run"; })
 
     # To ensure we always have a compatible nix in our shells.
     # CI doesn’t know `nix-env` otherwise.
@@ -94,18 +96,11 @@ pkgs.mkShell (
       exec 3>&1 # store stdout (1) in fd 3
       exec 1>&2 # make stdout (1) an alias for stderr (2)
 
-      alias ci="ci_check"
-
       # this is mirrored from .envrc to make available from nix-shell
       # pick up cargo plugins
       export PATH="$LORRI_ROOT/.cargo/bin:$PATH"
       # watch the output to add lorri once it's built
       export PATH="$LORRI_ROOT/target/debug:$PATH"
-
-      function ci_check() (
-        cd "$LORRI_ROOT";
-        ${ci.testsuite}
-      )
 
       ${pkgs.lib.optionalString isDevelopmentShell ''
       echo "lorri" | ${pkgs.figlet}/bin/figlet | ${pkgs.lolcat}/bin/lolcat

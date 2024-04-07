@@ -1,13 +1,19 @@
 builddir = .ninja
 
 build all : phony .github/workflows/ci.yml
-default all
 
 # show the graph of ninja build dependencies in zathura
 rule show-ninja-deps
   command = ninja -t graph | dot -Tpdf | zathura -
 
 build show-ninja-deps: show-ninja-deps | build.ninja
+
+# run all check as would be run on CI
+rule run-ci-checks
+  command = execlineb -c "nix-run { $in -A ci.testsuite }"
+
+build run-ci-checks : run-ci-checks ./shell.nix
+  pool = console
 
 # create the ci.yml file for github actions
 rule build-ci-files
