@@ -1,4 +1,4 @@
-{ pkgs, writeExecline }:
+{ pkgs }:
 let
   # Write commands to script which aborts immediately if a command is not successful.
   # The status of the unsuccessful command is returned.
@@ -79,6 +79,21 @@ let
     in
       builtins.listToAttrs (builtins.map f xs);
 
+  inherit (import ./runblock.nix { inherit pkgs; })
+    runblock
+    ;
+
+  inherit (import ./execline.nix { inherit pkgs; })
+    writeExecline
+    writeExeclineBin
+    ;
+
+  inherit (import ./nix-tools.nix { inherit pkgs writeExecline getBins runblock; })
+    nix-run
+    nix-run-bin
+    nix-eval
+    ;
+
 in
 {
   inherit
@@ -86,5 +101,10 @@ in
     pathAdd
     pathPrependBins
     getBins
+    writeExecline
+    writeExeclineBin
+    nix-run
+    nix-run-bin
+    nix-eval
     ;
 }

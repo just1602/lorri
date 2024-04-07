@@ -4,14 +4,12 @@ let
   lib = pkgs.lib;
   lorriBinDir = "${LORRI_ROOT}/target/debug";
 
-  inherit (import ./execline.nix { inherit pkgs; })
-    writeExecline;
-
-  inherit (import ./lib.nix { inherit pkgs writeExecline; })
+  inherit (import ../lib { inherit pkgs; })
     allCommandsSucceed
     pathAdd
     getBins
     pathPrependBins
+    writeExecline
     ;
 
   bins = getBins pkgs.shellcheck [ "shellcheck" ]
