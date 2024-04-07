@@ -93,8 +93,6 @@ pkgs.mkShell (
       # this is mirrored from .envrc to make available from nix-shell
       # pick up cargo plugins
       export PATH="$LORRI_ROOT/.cargo/bin:$PATH"
-      # watch the output to add lorri once it's built
-      export PATH="$LORRI_ROOT/target/debug:$PATH"
     '' + (
       if !pkgs.stdenv.isDarwin then "" else ''
         # Cargo wasn't able to find CF during a `cargo test` run on Darwin.
