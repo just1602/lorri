@@ -90,34 +90,11 @@ pkgs.mkShell (
 
     # Executed when entering `nix-shell`
     shellHook = ''
-      # we can only output to stderr in the shellHook,
-      # otherwise direnv `use nix` does not work.
-      # see https://github.com/direnv/direnv/issues/427
-      exec 3>&1 # store stdout (1) in fd 3
-      exec 1>&2 # make stdout (1) an alias for stderr (2)
-
       # this is mirrored from .envrc to make available from nix-shell
       # pick up cargo plugins
       export PATH="$LORRI_ROOT/.cargo/bin:$PATH"
       # watch the output to add lorri once it's built
       export PATH="$LORRI_ROOT/target/debug:$PATH"
-
-      ${pkgs.lib.optionalString isDevelopmentShell ''
-      echo "lorri" | ${pkgs.figlet}/bin/figlet | ${pkgs.lolcat}/bin/lolcat
-      (
-        format="  %-12s %s\n"
-        printf "$format" alias executes
-        printf "$format" ----- --------
-        IFS=$'\n'
-        for line in $(alias); do
-          [[ $line =~ ^alias\ ([^=]+)=(\'.*\') ]]
-          printf "$format" "''${BASH_REMATCH[1]}" "''${BASH_REMATCH[2]}"
-        done
-      )
-    ''}
-
-      # restore stdout and close 3
-      exec 1>&3-
     '' + (
       if !pkgs.stdenv.isDarwin then "" else ''
         # Cargo wasn't able to find CF during a `cargo test` run on Darwin.
