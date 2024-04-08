@@ -58,6 +58,7 @@ let
     pkgs.nix-prefetch-git
     pkgs.nixpkgs-fmt
     pkgs.ninja
+    pkgs.execline
     (lib.binify { exe = lib.nix-run; name = "nix-run"; })
 
     # To ensure we always have a compatible nix in our shells.
