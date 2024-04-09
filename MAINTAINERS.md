@@ -21,6 +21,7 @@ _machine-readable_.
 user is _forced to change how they interact_ with lorri.
 
 For example: it's a major release if since the last released version,
+
 - for any _top-level_ command line option:
   - the command line option was removed or renamed, or
   - the command line option changed from being optional to being mandatory, or
@@ -56,9 +57,10 @@ does not in itself necessitate a major release.
 ## Cutting a release
 
 To cut a new release:
+
 1. Determine if this is a [minor or major release](#versioning-scheme) and
    change the `version` field in `Cargo.toml` accordingly.
-2. Build the project to update `Cargo.lock`, then run `nix/update-nix.sh` to
+2. Build the project to update `Cargo.lock`, then run `ninja all` to
    update `Cargo.nix`.
 3. Go through all commits since the last release and cross-check against the
    release notes in `release.nix`. Add missing changes.
@@ -67,7 +69,7 @@ To cut a new release:
    commit.
 6. Tag the merge commit using `git tag --sign <version> <merge commit hash>`.
    Here, `<version>` is used as the name of the tag. It should adhere to the
-`MAJOR.MINOR.PATCH` format without prefix or suffix, for example `1.0.0` (and not
+   `MAJOR.MINOR.PATCH` format without prefix or suffix, for example `1.0.0` (and not
    `v1.0.0`).
 7. Push the tag using `git push origin <version>`.
 8. Go to https://github.com/nix-community/lorri/releases/new and use the pushed
@@ -82,6 +84,7 @@ from 20.09, which correspond to the `master` and `release-<stable-release-date>`
 (example: `release-20.03`) branches in the [nixpkgs][] repository, respectively.
 
 The relevant directories and files in [nixpkgs][] are:
+
 - [`pkgs/tools/misc/lorri`][nixpkgs-lorri-tool] declares the command line tool
 - [`nixos/modules/services/development/lorri.nix`][nixpkgs-lorri-service]
   declares the systemd module
@@ -89,6 +92,7 @@ The relevant directories and files in [nixpkgs][] are:
   test suite
 
 To update the lorri version in [nixpkgs][]:
+
 1. **`nixos-unstable`**: update the lorri version in a PR against `master`, see
    for example [NixOS#77380][nixos-unstable-pr]. Make sure the NixOS
    integration tests pass. You can run them locally from the root directory of
@@ -98,7 +102,7 @@ To update the lorri version in [nixpkgs][]:
    > @GrahamcOfBorg build lorri.tests
 
 2. **latest `nixos` stable**: _after_ the first PR has been merged into nixpkgs `master`,
-   if the new release is *not* a major version bump (aka a breaking change),
+   if the new release is _not_ a major version bump (aka a breaking change),
    follow the [backporting procedure][nixpkgs-backporting] to create a PR
    against `release-<latest-stable-release-date>` (e.g. `release-20.03`);
    see for example [NixOS#77432][nixos-stable-pr].
@@ -116,14 +120,14 @@ To update the lorri version in [nixpkgs][]:
 
 ## Updating dependencies
 
-Run `./nix/update-dependencies.sh` from the root directory of this
+Run `./nix/update-nixpkgs.sh` from the root directory of this
 repository. This updates `nixpkgs.json` to the latest commit of the
-stable nixos version that is set in `./nix/update-dependencies.sh`.
+stable nixos version that is set in `./nix/update-nixpkgs.sh`.
 
 Afterwards, don’t forget to run `nix-shell` and `nix-build` to test
 whether everything still builds.
 
-Run `./nix/update-nix.sh` to update Cargo's dependency list.
+Run `ninja all` to update Cargo's dependency list.
 
 [nixos-stable-pr]: https://github.com/NixOS/nixpkgs/pull/77432
 [nixos-unstable-pr]: https://github.com/NixOS/nixpkgs/pull/77380

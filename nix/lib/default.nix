@@ -1,4 +1,4 @@
-{ pkgs, writeExecline }:
+{ pkgs }:
 let
   # Write commands to script which aborts immediately if a command is not successful.
   # The status of the unsuccessful command is returned.
@@ -79,6 +79,35 @@ let
     in
       builtins.listToAttrs (builtins.map f xs);
 
+  # Create a store path where the executable `exe`
+  # is linked to $out/bin/${name}.
+  # This is useful for e.g. including it as a “package”
+  # in `buildInputs` of a shell.nix.
+  #
+  # For example, if I have the exeutable /nix/store/…-hello,
+  # I can make it into /nix/store/…-binify-hello/bin/hello
+  # with `binify { exe = …; name = "hello" }`.
+  binify = { exe, name }:
+    pkgs.runCommandLocal "binify-${name}" {} ''
+      mkdir -p $out/bin
+      ln -sT ${pkgs.lib.escapeShellArg exe} $out/bin/${pkgs.lib.escapeShellArg name}
+    '';
+
+  inherit (import ./runblock.nix { inherit pkgs; })
+    runblock
+    ;
+
+  inherit (import ./execline.nix { inherit pkgs; })
+    writeExecline
+    writeExeclineBin
+    ;
+
+  inherit (import ./nix-tools.nix { inherit pkgs writeExecline getBins runblock; })
+    nix-run
+    nix-run-bin
+    nix-eval
+    ;
+
 in
 {
   inherit
@@ -86,5 +115,11 @@ in
     pathAdd
     pathPrependBins
     getBins
+    binify
+    writeExecline
+    writeExeclineBin
+    nix-run
+    nix-run-bin
+    nix-eval
     ;
 }

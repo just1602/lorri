@@ -28,8 +28,8 @@ fn find_program<S: Display + AsRef<OsStr>>(program: S) -> PathBuf {
         &program
     );
 
-    let location = String::from_utf8(output.stdout).unwrap_or_else(|_| panic!("Found «{}», but the output is not utf8 clean.",
-        &program));
+    let location = String::from_utf8(output.stdout)
+        .unwrap_or_else(|_| panic!("Found «{}», but the output is not utf8 clean.", &program));
 
     PathBuf::from(location.trim())
 }

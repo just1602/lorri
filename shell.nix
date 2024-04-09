@@ -19,6 +19,7 @@ let
       RUN_TIME_CLOSURE
       ;
   };
+  lib = import ./nix/lib { inherit pkgs; };
 
   # Lorri-specific
 
@@ -56,6 +57,9 @@ let
     pkgs.crate2nix
     pkgs.nix-prefetch-git
     pkgs.nixpkgs-fmt
+    pkgs.ninja
+    pkgs.execline
+    (lib.binify { exe = lib.nix-run; name = "nix-run"; })
 
     # To ensure we always have a compatible nix in our shells.
     # CI doesn’t know `nix-env` otherwise.
@@ -66,6 +70,10 @@ let
     pkgs.darwin.apple_sdk.frameworks.CoreServices
     pkgs.darwin.apple_sdk.frameworks.CoreFoundation
     pkgs.libiconv
+  ]
+  ++ pkgs.lib.optionals isDevelopmentShell [
+    pkgs.graphviz
+    pkgs.zathura
   ];
 
 in
@@ -83,41 +91,12 @@ pkgs.mkShell (
 
     # Executed when entering `nix-shell`
     shellHook = ''
-      # we can only output to stderr in the shellHook,
-      # otherwise direnv `use nix` does not work.
-      # see https://github.com/direnv/direnv/issues/427
-      exec 3>&1 # store stdout (1) in fd 3
-      exec 1>&2 # make stdout (1) an alias for stderr (2)
-
-      alias ci="ci_check"
-
       # this is mirrored from .envrc to make available from nix-shell
       # pick up cargo plugins
       export PATH="$LORRI_ROOT/.cargo/bin:$PATH"
-      # watch the output to add lorri once it's built
-      export PATH="$LORRI_ROOT/target/debug:$PATH"
 
-      function ci_check() (
-        cd "$LORRI_ROOT";
-        ${ci.testsuite}
-      )
+      echo "You opened a nix-shell for lorri; this is fine, but we strongly enourage the use of direnv(1) and lorri(1) to develop lorri ;)" 1>&2
 
-      ${pkgs.lib.optionalString isDevelopmentShell ''
-      echo "lorri" | ${pkgs.figlet}/bin/figlet | ${pkgs.lolcat}/bin/lolcat
-      (
-        format="  %-12s %s\n"
-        printf "$format" alias executes
-        printf "$format" ----- --------
-        IFS=$'\n'
-        for line in $(alias); do
-          [[ $line =~ ^alias\ ([^=]+)=(\'.*\') ]]
-          printf "$format" "''${BASH_REMATCH[1]}" "''${BASH_REMATCH[2]}"
-        done
-      )
-    ''}
-
-      # restore stdout and close 3
-      exec 1>&3-
     '' + (
       if !pkgs.stdenv.isDarwin then "" else ''
         # Cargo wasn't able to find CF during a `cargo test` run on Darwin.
