@@ -19,7 +19,7 @@ build run-ci-checks : run-ci-checks ./shell.nix
 rule build-ci-files
   command = eval $$(nix-build $in -A writeConfig)
 
-build .github/workflows/ci.yml : build-ci-files ./.github/workflows/ci.nix ./Cargo.nix
+build .github/workflows/ci.yml : build-ci-files ./.github/workflows/ci.nix | ./Cargo.nix
 
 # update Cargo.nix from Cargo.toml
 rule update-cargo-nix
