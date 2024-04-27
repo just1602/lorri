@@ -77,7 +77,10 @@ impl Watch {
         let (tx, rx) = chan::unbounded();
 
         Ok(Watch {
-            notify: Watcher::new(tx, Duration::from_millis(100))?,
+            notify: notify::Watcher::new(
+                tx,
+                notify::Config::default().with_poll_interval(Duration::from_millis(100)),
+            )?,
             watches: HashSet::new(),
             rx,
             logger,
