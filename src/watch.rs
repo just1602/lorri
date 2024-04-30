@@ -417,7 +417,7 @@ fn walk_path_topo(path: PathBuf) -> Result<Vec<PathBuf>, std::io::Error> {
 #[cfg(test)]
 mod tests {
     use super::{Watch, WatchPathBuf};
-    use slog::info;
+    use slog::{debug, info};
     use std::ffi::OsStr;
     use std::path::PathBuf;
     use std::thread::sleep;
@@ -517,13 +517,29 @@ mod tests {
     }
 
     /// Assert no watcher event happens until the timeout
-    fn assert_none_within(watch: &Watch, timeout: Duration) {
+    ///
+    /// If file_suffixes_opt is given, only these files will be checked for.
+    fn assert_none_within(
+        watch: &Watch,
+        timeout: Duration,
+        file_suffixes_opt: Option<&[&str]>,
+        logger: &slog::Logger,
+    ) {
         let res = watch.watch_events_rx.recv_timeout(timeout);
         match res {
             Err(_) => (),
             Ok(watch_result) => {
+                if let Some(file_suffixes) = file_suffixes_opt {
+                    if !watch_result
+                        .iter()
+                        .any(|res| file_suffixes.into_iter().any(|suff| res.ends_with(suff)))
+                    {
+                        debug!(logger, "ignoring event not part of ignore filter"; "watch_result" => ?watch_result, "file_suffixes" => ?file_suffixes);
+                    }
+                }
                 panic!(
-                    "expected no file change notification for; but these files changed: {:?}",
+                    "expected no file change notification for suffixes {:?}; but these files changed: {:?}",
+                    file_suffixes_opt,
                     watch_result
                 );
             }
@@ -563,7 +579,7 @@ mod tests {
         drop(temp);
     }
 
-    fn mk_test_watch(test_name: &str) -> Watch {
+    fn mk_test_watch(logger: &slog::Logger) -> Watch {
         // Sometimes a brand new watch will send a CREATE notification
         // for a file which was just created, even if the watch was
         // created after the file was made.
@@ -575,19 +591,17 @@ mod tests {
         // Note, this is racey in the kernel. Otherwise I'd assert
         // this is empty.
         (if cfg!(target_os = "macos") {
-            Watch::new_impl(
-                &crate::logging::test_logger(test_name),
-                Some(WATCHER_TIMEOUT),
-            )
+            Watch::new_impl(logger, Some(WATCHER_TIMEOUT))
         } else {
-            Watch::new_impl(&crate::logging::test_logger(test_name), None)
+            Watch::new_impl(logger, None)
         })
         .expect("failed creating watch")
     }
 
     #[test]
     fn trivial_watch_whole_directory() {
-        let watcher = mk_test_watch("trivial_watch_whole_directory");
+        let logger = crate::logging::test_logger("trivial_watch_whole_directory");
+        let watcher = mk_test_watch(&logger);
         with_test_tempdir("trivial_watch_whole_directory", |t| {
             expect_bash(r#"mkdir -p "$1"/foo"#, [t]);
             expect_bash(r#"touch "$1"/foo/bar"#, [t]);
@@ -606,7 +620,8 @@ mod tests {
 
     #[test]
     fn trivial_watch_directory_not_recursively() {
-        let watcher = mk_test_watch("trivial_watch_directory_not_recursively");
+        let logger = crate::logging::test_logger("trivial_watch_directory_not_recursively");
+        let watcher = mk_test_watch(&logger);
         with_test_tempdir("trivial_watch_directory_not_recursively", |t| {
             expect_bash(r#"mkdir -p "$1"/foo"#, [t]);
             expect_bash(r#"touch "$1"/foo/bar"#, [t]);
@@ -619,12 +634,13 @@ mod tests {
             assert_file_changed_within(&watcher, "baz", WATCHER_TIMEOUT);
 
             expect_bash(r#"echo 1 > "$1/foo/bar""#, [t]);
-            assert_none_within(&watcher, WATCHER_TIMEOUT);
+            assert_none_within(&watcher, WATCHER_TIMEOUT, None, &logger);
         })
     }
     #[test]
     fn trivial_watch_specific_file() {
-        let watcher = mk_test_watch("trivial_watch_specific_file");
+        let logger = crate::logging::test_logger("trivial_watch_specific_file");
+        let watcher = mk_test_watch(&logger);
 
         with_test_tempdir("trivial_watch_specific_file", |t| {
             expect_bash(r#"mkdir -p "$1""#, [t]);
@@ -645,8 +661,8 @@ mod tests {
     #[test]
     fn rename_over_vim() {
         // Vim renames files in to place for atomic writes
-        let watcher = mk_test_watch("rename_over_vim");
-        let logger = &crate::logging::test_logger("rename_over_vim");
+        let logger = crate::logging::test_logger("rename_over_vim");
+        let watcher = mk_test_watch(&logger);
 
         with_test_tempdir("rename_over_vim", |t| {
             expect_bash(r#"mkdir -p "$1""#, [t]);
@@ -656,19 +672,19 @@ mod tests {
                 .send(vec![WatchPathBuf::Recursive(t.join("foo"))])
                 .unwrap();
 
-            info!(logger, "bar is not watched, expect error");
+            info!(&logger, "bar is not watched, expect error");
             expect_bash(r#"echo 1 > "$1/bar""#, [t]);
-            assert_none_within(&watcher, WATCHER_TIMEOUT);
+            assert_none_within(&watcher, WATCHER_TIMEOUT, Some(&vec!["/bar"]), &logger);
 
-            info!(logger, "Rename bar to foo, expect a notification");
+            info!(&logger, "Rename bar to foo, expect a notification");
             expect_bash(r#"mv "$1/bar" "$1/foo""#, [t]);
             assert_file_changed_within(&watcher, "foo", WATCHER_TIMEOUT);
 
-            info!(logger, "Do it a second time");
+            info!(&logger, "Do it a second time");
             expect_bash(r#"echo 1 > "$1/bar""#, [t]);
-            assert_none_within(&watcher, WATCHER_TIMEOUT);
+            assert_none_within(&watcher, WATCHER_TIMEOUT, None, &logger);
 
-            info!(logger, "Rename bar to foo, expect a notification");
+            info!(&logger, "Rename bar to foo, expect a notification");
             expect_bash(r#"mv "$1/bar" "$1/foo""#, [t]);
             assert_file_changed_within(&watcher, "foo", WATCHER_TIMEOUT);
         })
