@@ -562,7 +562,7 @@ mod tests {
         drop(temp);
     }
 
-    fn mk_test_watch() -> Watch {
+    fn mk_test_watch(test_name: &str) -> Watch {
         // Sometimes a brand new watch will send a CREATE notification
         // for a file which was just created, even if the watch was
         // created after the file was made.
@@ -574,16 +574,19 @@ mod tests {
         // Note, this is racey in the kernel. Otherwise I'd assert
         // this is empty.
         (if cfg!(target_os = "macos") {
-            Watch::new_impl(&crate::logging::test_logger(), Some(WATCHER_TIMEOUT))
+            Watch::new_impl(
+                &crate::logging::test_logger(test_name),
+                Some(WATCHER_TIMEOUT),
+            )
         } else {
-            Watch::new_impl(&crate::logging::test_logger(), None)
+            Watch::new_impl(&crate::logging::test_logger(test_name), None)
         })
         .expect("failed creating watch")
     }
 
     #[test]
     fn trivial_watch_whole_directory() {
-        let watcher = mk_test_watch();
+        let watcher = mk_test_watch("trivial_watch_whole_directory");
         with_test_tempdir(|t| {
             expect_bash(r#"mkdir -p "$1"/foo"#, [t]);
             expect_bash(r#"touch "$1"/foo/bar"#, [t]);
@@ -602,7 +605,7 @@ mod tests {
 
     #[test]
     fn trivial_watch_directory_not_recursively() {
-        let watcher = mk_test_watch();
+        let watcher = mk_test_watch("trivial_watch_directory_not_recursively");
         with_test_tempdir(|t| {
             expect_bash(r#"mkdir -p "$1"/foo"#, [t]);
             expect_bash(r#"touch "$1"/foo/bar"#, [t]);
@@ -620,7 +623,7 @@ mod tests {
     }
     #[test]
     fn trivial_watch_specific_file() {
-        let watcher = mk_test_watch();
+        let watcher = mk_test_watch("trivial_watch_specific_file");
 
         with_test_tempdir(|t| {
             expect_bash(r#"mkdir -p "$1""#, [t]);
@@ -641,7 +644,7 @@ mod tests {
     #[test]
     fn rename_over_vim() {
         // Vim renames files in to place for atomic writes
-        let watcher = mk_test_watch();
+        let watcher = mk_test_watch("rename_over_vim");
 
         with_test_tempdir(|t| {
             expect_bash(r#"mkdir -p "$1""#, [t]);

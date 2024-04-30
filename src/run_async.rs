@@ -162,7 +162,9 @@ mod tests {
     fn test_chan_drop_order() {
         // we make the async just block on a channel which we can control from outside
         let (tx, rx) = chan::bounded(1);
-        let a = Async::run(&crate::logging::test_logger(), move || rx.recv());
+        let a = Async::run(&crate::logging::test_logger("chan_drop_order"), move || {
+            rx.recv()
+        });
         let c = a.chan();
         // nothing has been sent to the thread yet, so timeout
         assert_eq!(
@@ -182,7 +184,10 @@ mod tests {
     #[test]
     fn test_chan_block_still_works() {
         // check that even after getting a channel the blocking still works
-        let a = Async::run(&crate::logging::test_logger(), move || 42);
+        let a = Async::run(
+            &crate::logging::test_logger("chan_block_still_works"),
+            move || 42,
+        );
         let c = a.chan();
         assert_eq!(a.block(), 42);
         // would be disconnected, because the result was already retrieved by the block
@@ -202,12 +207,14 @@ mod tests {
         let was_stopped = Arc::new(AtomicBool::new(false));
         let was_stopped2 = was_stopped.clone();
 
-        let a =
-            Async::run_with_stop_signal(&crate::logging::test_logger(), move |stop_signal_rx| {
+        let a = Async::run_with_stop_signal(
+            &crate::logging::test_logger("stop_signal"),
+            move |stop_signal_rx| {
                 chan::select! {
                     recv(stop_signal_rx) -> _ => { was_stopped2.store(true, Ordering::Relaxed) }
                 }
-            });
+            },
+        );
 
         drop(a);
         assert_eq!(was_stopped.load(Ordering::Relaxed), true)
