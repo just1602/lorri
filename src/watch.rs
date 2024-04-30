@@ -551,14 +551,14 @@ mod tests {
     }
 
     /// Create a tempdir for our test and drop it after the function runs.
-    fn with_test_tempdir<F>(f: F)
+    fn with_test_tempdir<F>(test_name: &str, f: F)
     where
         F: FnOnce(&std::path::Path),
     {
         let temp: TempDir = tempdir().unwrap();
 
         // TODO: We use a subdirectory for our tests, because the watcher (for whatever reason) also watches the parent directory, which means we start watching `/tmp` in our tests …
-        f(&temp.path().join("testdir"));
+        f(&temp.path().join("testdir_of_".to_string() + test_name));
         drop(temp);
     }
 
@@ -587,7 +587,7 @@ mod tests {
     #[test]
     fn trivial_watch_whole_directory() {
         let watcher = mk_test_watch("trivial_watch_whole_directory");
-        with_test_tempdir(|t| {
+        with_test_tempdir("trivial_watch_whole_directory", |t| {
             expect_bash(r#"mkdir -p "$1"/foo"#, [t]);
             expect_bash(r#"touch "$1"/foo/bar"#, [t]);
             watcher
@@ -606,7 +606,7 @@ mod tests {
     #[test]
     fn trivial_watch_directory_not_recursively() {
         let watcher = mk_test_watch("trivial_watch_directory_not_recursively");
-        with_test_tempdir(|t| {
+        with_test_tempdir("trivial_watch_directory_not_recursively", |t| {
             expect_bash(r#"mkdir -p "$1"/foo"#, [t]);
             expect_bash(r#"touch "$1"/foo/bar"#, [t]);
             watcher
@@ -625,7 +625,7 @@ mod tests {
     fn trivial_watch_specific_file() {
         let watcher = mk_test_watch("trivial_watch_specific_file");
 
-        with_test_tempdir(|t| {
+        with_test_tempdir("trivial_watch_specific_file", |t| {
             expect_bash(r#"mkdir -p "$1""#, [t]);
             expect_bash(r#"touch "$1/foo""#, [t]);
             watcher
@@ -646,7 +646,7 @@ mod tests {
         // Vim renames files in to place for atomic writes
         let watcher = mk_test_watch("rename_over_vim");
 
-        with_test_tempdir(|t| {
+        with_test_tempdir("rename_over_vim", |t| {
             expect_bash(r#"mkdir -p "$1""#, [t]);
             expect_bash(r#"touch "$1/foo""#, [t]);
             watcher
@@ -674,7 +674,7 @@ mod tests {
 
     #[test]
     fn walk_path_topo_filetree() {
-        with_test_tempdir(|t| {
+        with_test_tempdir("walk_path_topo_filetree", |t| {
             let files = vec![("a", "b"), ("a", "c"), ("a/d", "e"), ("x/y", "z")];
             for (dir, file) in files {
                 std::fs::create_dir_all(t.join(dir)).unwrap();
