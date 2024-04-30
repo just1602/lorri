@@ -752,6 +752,27 @@ rec {
         };
         resolvedDefaultFeatures = [ "alloc" "default" "std" ];
       };
+      "file-id" = rec {
+        crateName = "file-id";
+        version = "0.2.1";
+        edition = "2021";
+        crateBin = [];
+        sha256 = "1jdg9xq830hghzrqkbnx8nda58a7z6mh8b6vlg5mj87v4l2ji135";
+        authors = [
+          "Daniel Faust <hessijames@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "windows-sys";
+            packageId = "windows-sys 0.48.0";
+            target = { target, features }: (target."windows" or false);
+            features = [ "Win32_Storage_FileSystem" "Win32_Foundation" ];
+          }
+        ];
+        features = {
+          "serde" = [ "dep:serde" ];
+        };
+      };
       "filetime" = rec {
         crateName = "filetime";
         version = "0.2.23";
@@ -772,7 +793,7 @@ rec {
           }
           {
             name = "redox_syscall";
-            packageId = "redox_syscall";
+            packageId = "redox_syscall 0.4.1";
             target = { target, features }: ("redox" == target."os");
           }
           {
@@ -1230,6 +1251,34 @@ rec {
         };
         resolvedDefaultFeatures = [ "elf" "errno" "general" "ioctl" "no_std" ];
       };
+      "lock_api" = rec {
+        crateName = "lock_api";
+        version = "0.4.12";
+        edition = "2021";
+        sha256 = "05qvxa6g27yyva25a5ghsg85apdxkvr77yhkyhapj6r8vnf8pbq7";
+        authors = [
+          "Amanieu d'Antras <amanieu@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "scopeguard";
+            packageId = "scopeguard";
+            usesDefaultFeatures = false;
+          }
+        ];
+        buildDependencies = [
+          {
+            name = "autocfg";
+            packageId = "autocfg";
+          }
+        ];
+        features = {
+          "default" = [ "atomic_usize" ];
+          "owning_ref" = [ "dep:owning_ref" ];
+          "serde" = [ "dep:serde" ];
+        };
+        resolvedDefaultFeatures = [ "atomic_usize" "default" ];
+      };
       "log" = rec {
         crateName = "log";
         version = "0.4.21";
@@ -1321,6 +1370,10 @@ rec {
           {
             name = "notify";
             packageId = "notify";
+          }
+          {
+            name = "notify-debouncer-full";
+            packageId = "notify-debouncer-full";
           }
           {
             name = "regex";
@@ -1723,6 +1776,49 @@ rec {
         };
         resolvedDefaultFeatures = [ "crossbeam-channel" "default" "fsevent-sys" "macos_fsevent" ];
       };
+      "notify-debouncer-full" = rec {
+        crateName = "notify-debouncer-full";
+        version = "0.3.1";
+        edition = "2021";
+        sha256 = "0m31ad5wv0lhrncn6qqk4zmryf0fl9h1j9kzrx89p2rlkjsxmxa9";
+        libName = "notify_debouncer_full";
+        authors = [
+          "Daniel Faust <hessijames@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "crossbeam-channel";
+            packageId = "crossbeam-channel";
+            optional = true;
+          }
+          {
+            name = "file-id";
+            packageId = "file-id";
+          }
+          {
+            name = "log";
+            packageId = "log";
+          }
+          {
+            name = "notify";
+            packageId = "notify";
+          }
+          {
+            name = "parking_lot";
+            packageId = "parking_lot";
+          }
+          {
+            name = "walkdir";
+            packageId = "walkdir";
+          }
+        ];
+        features = {
+          "crossbeam" = [ "crossbeam-channel" "notify/crossbeam-channel" ];
+          "crossbeam-channel" = [ "dep:crossbeam-channel" ];
+          "default" = [ "crossbeam" ];
+        };
+        resolvedDefaultFeatures = [ "crossbeam" "crossbeam-channel" "default" ];
+      };
       "num-conv" = rec {
         crateName = "num-conv";
         version = "0.1.0";
@@ -1819,6 +1915,73 @@ rec {
           }
         ];
 
+      };
+      "parking_lot" = rec {
+        crateName = "parking_lot";
+        version = "0.12.2";
+        edition = "2021";
+        sha256 = "1ys2dzz6cysjmwyivwxczl1ljpcf5cj4qmhdj07d5bkc9z5g0jky";
+        authors = [
+          "Amanieu d'Antras <amanieu@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "lock_api";
+            packageId = "lock_api";
+          }
+          {
+            name = "parking_lot_core";
+            packageId = "parking_lot_core";
+          }
+        ];
+        features = {
+          "arc_lock" = [ "lock_api/arc_lock" ];
+          "deadlock_detection" = [ "parking_lot_core/deadlock_detection" ];
+          "nightly" = [ "parking_lot_core/nightly" "lock_api/nightly" ];
+          "owning_ref" = [ "lock_api/owning_ref" ];
+          "serde" = [ "lock_api/serde" ];
+        };
+        resolvedDefaultFeatures = [ "default" ];
+      };
+      "parking_lot_core" = rec {
+        crateName = "parking_lot_core";
+        version = "0.9.10";
+        edition = "2021";
+        sha256 = "1y3cf9ld9ijf7i4igwzffcn0xl16dxyn4c5bwgjck1dkgabiyh0y";
+        authors = [
+          "Amanieu d'Antras <amanieu@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "cfg-if";
+            packageId = "cfg-if 1.0.0";
+          }
+          {
+            name = "libc";
+            packageId = "libc";
+            target = { target, features }: (target."unix" or false);
+          }
+          {
+            name = "redox_syscall";
+            packageId = "redox_syscall 0.5.1";
+            target = { target, features }: ("redox" == target."os");
+          }
+          {
+            name = "smallvec";
+            packageId = "smallvec";
+          }
+          {
+            name = "windows-targets";
+            packageId = "windows-targets 0.52.4";
+            target = { target, features }: (target."windows" or false);
+          }
+        ];
+        features = {
+          "backtrace" = [ "dep:backtrace" ];
+          "deadlock_detection" = [ "petgraph" "thread-id" "backtrace" ];
+          "petgraph" = [ "dep:petgraph" ];
+          "thread-id" = [ "dep:thread-id" ];
+        };
       };
       "powerfmt" = rec {
         crateName = "powerfmt";
@@ -2265,7 +2428,7 @@ rec {
         };
         resolvedDefaultFeatures = [ "default" "std" ];
       };
-      "redox_syscall" = rec {
+      "redox_syscall 0.4.1" = rec {
         crateName = "redox_syscall";
         version = "0.4.1";
         edition = "2018";
@@ -2278,6 +2441,26 @@ rec {
           {
             name = "bitflags";
             packageId = "bitflags 1.2.1";
+          }
+        ];
+        features = {
+          "core" = [ "dep:core" ];
+          "rustc-dep-of-std" = [ "core" "bitflags/rustc-dep-of-std" ];
+        };
+      };
+      "redox_syscall 0.5.1" = rec {
+        crateName = "redox_syscall";
+        version = "0.5.1";
+        edition = "2018";
+        sha256 = "0zja6y3av9z50gg1hh0vsc053941wng21r43whhk8mfb9n4m5426";
+        libName = "syscall";
+        authors = [
+          "Jeremy Soller <jackpot51@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "bitflags";
+            packageId = "bitflags 2.5.0";
           }
         ];
         features = {
@@ -2648,6 +2831,18 @@ rec {
         ];
 
       };
+      "scopeguard" = rec {
+        crateName = "scopeguard";
+        version = "1.2.0";
+        edition = "2015";
+        sha256 = "0jcz9sd47zlsgcnm1hdw0664krxwb5gczlif4qngj2aif8vky54l";
+        authors = [
+          "bluss"
+        ];
+        features = {
+          "default" = [ "use_std" ];
+        };
+      };
       "serde" = rec {
         crateName = "serde";
         version = "1.0.197";
@@ -2808,6 +3003,21 @@ rec {
           "nested-values" = [ "erased-serde" "serde" "serde_json" "slog/nested-values" ];
           "serde" = [ "dep:serde" ];
           "serde_json" = [ "dep:serde_json" ];
+        };
+      };
+      "smallvec" = rec {
+        crateName = "smallvec";
+        version = "1.13.2";
+        edition = "2018";
+        sha256 = "0rsw5samawl3wsw6glrsb127rx6sh89a8wyikicw6dkdcjd1lpiw";
+        authors = [
+          "The Servo Project Developers"
+        ];
+        features = {
+          "arbitrary" = [ "dep:arbitrary" ];
+          "const_new" = [ "const_generics" ];
+          "drain_keep_rest" = [ "drain_filter" ];
+          "serde" = [ "dep:serde" ];
         };
       };
       "strsim" = rec {
