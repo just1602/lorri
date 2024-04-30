@@ -47,7 +47,7 @@ fn loads_env() {
         .expect("fail to run lorri shell");
     assert!(res.status.success(), "lorri shell command failed");
 
-    let logger = lorri::logging::test_logger();
+    let logger = lorri::logging::test_logger("loads_env");
 
     let output = ops::bash_cmd(build(&project, &logger), &project.cas, &logger)
         .unwrap()

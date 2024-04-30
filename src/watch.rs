@@ -1,13 +1,18 @@
 //! Recursively watch paths for changes, in an extensible and
 //! cross-platform way.
 
+use chan::{select, Receiver, Sender};
 use crossbeam_channel as chan;
 use notify::event::ModifyKind;
 use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
-use slog::{debug, info};
+use notify_debouncer_full::{DebounceEventResult, DebouncedEvent, Debouncer, FileIdMap};
+use slog::{debug, info, warn};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use std::time::Duration;
+
+use crate::run_async::{Async, StopSignal};
 
 /// Represents if a path to watch should be watched recursively by the watcher or not
 #[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
@@ -49,16 +54,53 @@ impl WatchPathBuf {
 
 /// A dynamic list of paths to watch for changes, and
 /// react to changes when they occur.
+///
+/// It runs a thread, which is stopped once this struct is dropped.
 pub struct Watch {
-    /// Event receiver. Process using `Watch::process`.
-    pub rx: chan::Receiver<notify::Result<notify::Event>>,
-    /// OS-based notification when any file we watched changes.
-    notify: RecommendedWatcher,
-    /// The list of files we are watching;
+    /// Receives watch events. When receiving events, run `Watch::process` on them
+    pub watch_events_rx: chan::Receiver<Vec<PathBuf>>,
+    /// Extend the watch list with an additional list of paths.
     ///
-    /// Invariant: all paths in here should be canonicalized.
-    watches: HashSet<PathBuf>,
-    logger: slog::Logger,
+    /// Note: Watch maintains a list of already watched paths, and
+    /// will not add duplicates.
+    pub add_to_watch_tx: chan::Sender<Vec<WatchPathBuf>>,
+    /// Thread that waits for events.
+    #[allow(dead_code)]
+    watch_thread: Async<()>,
+}
+
+impl Watch {
+    /// Instantiate a new Watch.
+    pub fn new(logger: &slog::Logger) -> Result<Watch, notify::Error> {
+        Self::new_impl(logger, None)
+    }
+
+    fn new_impl(
+        logger: &slog::Logger,
+        drop_first_event_within: Option<Duration>,
+    ) -> Result<Watch, notify::Error> {
+        let (filtered_events_tx, filtered_events_rx) = chan::unbounded();
+        let (user_requests_tx, user_requests_rx) = chan::unbounded();
+
+        let mut filter = Mutex::new(Filter::new(
+            user_requests_rx,
+            filtered_events_tx,
+            drop_first_event_within,
+            logger,
+        )?);
+        let watch_thread = Async::run_with_stop_signal(logger, move |stop_signal_rx| {
+            filter
+                .get_mut()
+                .expect("watcher mutex poisoned")
+                .loop_on_events(stop_signal_rx)
+        });
+
+        Ok(Watch {
+            watch_events_rx: filtered_events_rx,
+            add_to_watch_tx: user_requests_tx,
+            watch_thread,
+        })
+    }
 }
 
 /// A debug message string that can only be displayed via `Debug`.
@@ -71,74 +113,161 @@ struct FilteredOut<'a> {
     path: PathBuf,
 }
 
-impl Watch {
-    /// Instantiate a new Watch.
-    pub fn new(logger: slog::Logger) -> Result<Watch, notify::Error> {
-        let (tx, rx) = chan::unbounded();
+struct Filter {
+    /// The low-level watcher
+    filesystem_watcher: Debouncer<RecommendedWatcher, FileIdMap>,
+    /// Unfiltered events from `notify` library
+    filesystem_events_rx: Receiver<DebounceEventResult>,
+    /// User requests to add more paths to our watcher
+    user_requests_rx: Receiver<Vec<WatchPathBuf>>,
+    /// Channel we send filtered messages to
+    filtered_events_tx: Sender<Vec<PathBuf>>,
+    /// Set of currently watched paths
+    current_watched: HashSet<PathBuf>,
+    // Whether to drop the first event if it arrives faster than the given duration (hack for macos tests)
+    drop_first_event_within: Option<Duration>,
+    logger: slog::Logger,
+}
 
-        Ok(Watch {
-            notify: Watcher::new(tx, Duration::from_millis(100))?,
-            watches: HashSet::new(),
-            rx,
-            logger,
+impl Filter {
+    fn new(
+        user_requests_rx: Receiver<Vec<WatchPathBuf>>,
+        filtered_events_tx: Sender<Vec<PathBuf>>,
+        drop_first_event_within: Option<Duration>,
+        logger: &slog::Logger,
+    ) -> notify::Result<Self> {
+        let (filesystem_events_tx, filesystem_events_rx) = chan::unbounded();
+
+        Ok(Filter {
+            filesystem_watcher: notify_debouncer_full::new_debouncer(
+                Duration::from_millis(200),
+                None,
+                filesystem_events_tx,
+            )?,
+            filesystem_events_rx,
+            user_requests_rx,
+            filtered_events_tx,
+            current_watched: HashSet::new(),
+            logger: logger.clone(),
+            drop_first_event_within,
         })
+    }
+
+    fn loop_on_events(&mut self, stop_signal_rx: chan::Receiver<StopSignal>) {
+        loop {
+            let mut drop_event = false;
+            let drop_first_event_within_rx = if let Some(dur) = self.drop_first_event_within {
+                drop_event = true;
+                chan::after(dur)
+            } else {
+                chan::never()
+            };
+            // make sure this only happens during the first loop
+            self.drop_first_event_within = None;
+
+            select! {
+
+                // stop this watcher
+                recv(stop_signal_rx) -> _ => {
+                    debug!(self.logger, "watch filter loop received stop signal, stopping");
+                    break;
+                },
+
+                // potentially drop the first message
+                recv(drop_first_event_within_rx) -> _ => {
+                    debug!(self.logger, "No event arrived within the initial drop timeout."; "duration" => ?self.drop_first_event_within);
+                }
+
+                // Handle file events
+                recv(self.filesystem_events_rx) -> msg => match msg {
+                    Ok( DebounceEventResult::Ok(event)) => {
+                        if drop_event {
+                            debug!(self.logger, "dropping event because drop_event was true"; "event" => ?event);
+                            continue
+                        }
+                        let paths = self.process_watch_events(event);
+                        if !paths.is_empty() {
+                            if let Err(e) = self.filtered_events_tx.send(paths) {
+                                warn!(self.logger, "filtered_events_tx send error"; "error" => ?e)
+                            }
+                    }},
+                    Ok(DebounceEventResult::Err(errs)) => {
+                        warn!(self.logger, "notify library threw errors: {:#?}", errs);
+                        continue
+                    },
+                    Err(_recv_error) => {
+                        debug!(self.logger, "filesystem notify channel was disconnected");
+                        return
+                    }
+                },
+
+                // Add new files to watch
+                recv(self.user_requests_rx) -> msg => match msg {
+                    Ok(paths) => {
+                        let path_log = format!("{:?}", paths);
+                        if let Err(e) = self.extend(paths) {
+                                warn!(self.logger, "error extending watch paths:"; "error" => ?e, "paths" => path_log)
+                        }
+                    },
+                    Err(chan::RecvError) => {
+                        debug!(self.logger, "watch extension channel was disconnected");
+                        return
+                    }
+                }
+            }
+        }
     }
 
     /// Process `notify::Event`s coming in via `Watch::rx`.
     ///
-    /// Returns a list of „interesting“ paths.
-    ///
-    /// `None` if there were no relevant changes.
-    pub fn process_watch_events(
-        &self,
-        event: notify::Result<notify::Event>,
-    ) -> Option<Vec<PathBuf>> {
-        match event {
-            Ok(event) => {
-                {
-                    let event = &event;
-                    debug!(self.logger, "Watch Event: {:#?}", event);
-                    match &event.kind {
-                        notify::event::EventKind::Remove(_) if !event.paths.is_empty() => {
-                            info!(self.logger, "identified removal: {:?}", &event.paths);
-                        }
-                        _ => {
-                            debug!(self.logger, "watch event"; "event" => ?event);
-                        }
+    /// Returns a list of „interesting“ paths, if any.
+    fn process_watch_events(&self, events: Vec<DebouncedEvent>) -> Vec<PathBuf> {
+        let mut interesting_paths = vec![];
+        for event in &events {
+            {
+                match event.kind {
+                    notify::event::EventKind::Remove(_) if !event.paths.is_empty() => {
+                        info!(self.logger, "identified removal: {:?}", &event.paths);
                     }
-                };
-                let notify::Event { paths, kind, .. } = event;
-                let interesting_paths: Vec<PathBuf> = paths
-                    .into_iter()
-                    .filter(|path| {
-                        // We ignore metadata modification events for the profiles directory
-                        // tree as it is a symlink forest that is used to keep track of
-                        // channels and nix will uconditionally update the metadata of each
-                        // link in this forest. See https://github.com/NixOS/nix/blob/629b9b0049363e091b76b7f60a8357d9f94733cc/src/libstore/local-store.cc#L74-L80
-                        // for the unconditional update. These metadata modification events are
-                        // spurious annd they can easily cause a rebuild-loop when a shell.nix
-                        // file does not pin its version of nixpkgs or other channels. When
-                        // a Nix channel is updated we receive many other types of events, so
-                        // ignoring these metadata modifications will not impact lorri's
-                        // ability to correctly watch for channel changes.
-                        if let EventKind::Modify(ModifyKind::Metadata(_)) = kind {
-                            if path.starts_with(Path::new("/nix/var/nix/profiles/per-user")) {
-                                return false;
-                            }
-                        }
-                        self.path_match(path)
-                    })
-                    .collect();
-                match interesting_paths.is_empty() {
-                    true => None,
-                    false => Some(interesting_paths),
+                    _ => {
+                        debug!(self.logger, "watch event"; "event" => ?event);
+                    }
+                }
+            };
+            let notify::Event {
+                ref paths, kind, ..
+            } = event.event;
+            for path in paths {
+                // We ignore metadata modification events for the profiles directory
+                // tree as it is a symlink forest that is used to keep track of
+                // channels and nix will uconditionally update the metadata of each
+                // link in this forest. See https://github.com/NixOS/nix/blob/629b9b0049363e091b76b7f60a8357d9f94733cc/src/libstore/local-store.cc#L74-L80
+                // for the unconditional update. These metadata modification events are
+                // spurious annd they can easily cause a rebuild-loop when a shell.nix
+                // file does not pin its version of nixpkgs or other channels. When
+                // a Nix channel is updated we receive many other types of events, so
+                // ignoring these metadata modifications will not impact lorri's
+                // ability to correctly watch for channel changes.
+                if let EventKind::Modify(ModifyKind::Metadata(_)) = kind {
+                    if path.starts_with(Path::new("/nix/var/nix/profiles/per-user")) {
+                        continue;
+                    }
+                }
+
+                if self.path_match(path) {
+                    interesting_paths.push((path, event))
                 }
             }
-            Err(err) => {
-                slog::warn!(self.logger, "notify library threw error: {}", err);
-                None
-            }
         }
+        if interesting_paths.is_empty() {
+            debug!(self.logger, "generated no interesting paths");
+        } else {
+            debug!(self.logger, "generated interesting paths"; "paths" => ?interesting_paths);
+        }
+        interesting_paths
+            .into_iter()
+            .map(|(path, _)| path.clone())
+            .collect()
     }
 
     /// Extend the watch list with an additional list of paths.
@@ -168,18 +297,22 @@ impl Watch {
                     )
                 } else {
                     let this = &mut *self;
-                    if !this.watches.contains(&p) {
+                    if !this.current_watched.contains(&p) {
                         debug!(this.logger, "watching path"; "path" => p.to_str());
 
-                        this.notify.watch(&p, RecursiveMode::NonRecursive)?;
-                        this.watches.insert(p.clone());
+                        this.filesystem_watcher
+                            .watcher()
+                            .watch(&p, RecursiveMode::NonRecursive)?;
+                        this.current_watched.insert(p.clone());
                     }
 
                     if let Some(parent) = p.parent() {
-                        if !this.watches.contains(parent) {
+                        if !this.current_watched.contains(parent) {
                             debug!(this.logger, "watching parent path"; "parent_path" => parent.to_str());
 
-                            this.notify.watch(parent, RecursiveMode::NonRecursive)?;
+                            this.filesystem_watcher
+                                .watcher()
+                                .watch(parent, RecursiveMode::NonRecursive)?;
                         }
                     }
                 }
@@ -202,7 +335,7 @@ impl Watch {
     fn path_match(&self, event_path: &Path) -> bool {
         let event_parent = event_path.parent();
 
-        self.watches.iter().any(|watched: &PathBuf| {
+        self.current_watched.iter().any(|watched: &PathBuf| {
             if event_path == watched {
                 debug!(
                 self.logger,
@@ -284,6 +417,7 @@ fn walk_path_topo(path: PathBuf) -> Result<Vec<PathBuf>, std::io::Error> {
 #[cfg(test)]
 mod tests {
     use super::{Watch, WatchPathBuf};
+    use slog::{debug, info};
     use std::ffi::OsStr;
     use std::path::PathBuf;
     use std::thread::sleep;
@@ -356,17 +490,17 @@ mod tests {
         F: Fn(&PathBuf) -> bool,
     {
         let start = time::Instant::now();
-        let mut rest = timeout.clone();
+        let mut rest = timeout;
         let mut seen: Vec<PathBuf> = vec![];
         let mut i = 0;
         loop {
             println!("loop {} rest: {}ms, seen: {:?}", i, rest.as_millis(), seen);
-            i = i + 1;
-            let recv = watch.rx.recv_timeout(rest);
-            println!("recv: {:#?}", recv);
-            let files = recv
-                .map_or(None, |e| watch.process_watch_events(e))
-                .unwrap_or(vec![]);
+            i += 1;
+            let files = watch
+                .watch_events_rx
+                .recv_timeout(rest)
+                .expect("working notify in tests");
+            println!("files: {:#?}", files);
             seen.extend(files.clone());
             for f in files {
                 if pred(&f) {
@@ -383,13 +517,29 @@ mod tests {
     }
 
     /// Assert no watcher event happens until the timeout
-    fn assert_none_within(watch: &Watch, timeout: Duration) {
-        let res = watch.rx.recv_timeout(timeout);
+    ///
+    /// If file_suffixes_opt is given, only these files will be checked for.
+    fn assert_none_within(
+        watch: &Watch,
+        timeout: Duration,
+        file_suffixes_opt: Option<&[&str]>,
+        logger: &slog::Logger,
+    ) {
+        let res = watch.watch_events_rx.recv_timeout(timeout);
         match res {
-            Err(_) => return,
+            Err(_) => (),
             Ok(watch_result) => {
+                if let Some(file_suffixes) = file_suffixes_opt {
+                    if !watch_result
+                        .iter()
+                        .any(|res| file_suffixes.into_iter().any(|suff| res.ends_with(suff)))
+                    {
+                        debug!(logger, "ignoring event not part of ignore filter"; "watch_result" => ?watch_result, "file_suffixes" => ?file_suffixes);
+                    }
+                }
                 panic!(
-                    "expected no file change notification for; but these files changed: {:?}",
+                    "expected no file change notification for suffixes {:?}; but these files changed: {:?}",
+                    file_suffixes_opt,
                     watch_result
                 );
             }
@@ -418,19 +568,18 @@ mod tests {
     }
 
     /// Create a tempdir for our test and drop it after the function runs.
-    fn with_test_tempdir<F>(f: F)
+    fn with_test_tempdir<F>(test_name: &str, f: F)
     where
         F: FnOnce(&std::path::Path),
     {
         let temp: TempDir = tempdir().unwrap();
 
         // TODO: We use a subdirectory for our tests, because the watcher (for whatever reason) also watches the parent directory, which means we start watching `/tmp` in our tests …
-        f(&temp.path().join("testdir"));
+        f(&temp.path().join("testdir_of_".to_string() + test_name));
         drop(temp);
     }
 
-    #[cfg(target_os = "macos")]
-    fn macos_eat_late_notifications(watcher: &mut Watch) {
+    fn mk_test_watch(logger: &slog::Logger) -> Watch {
         // Sometimes a brand new watch will send a CREATE notification
         // for a file which was just created, even if the watch was
         // created after the file was made.
@@ -441,28 +590,24 @@ mod tests {
         //
         // Note, this is racey in the kernel. Otherwise I'd assert
         // this is empty.
-        sleep(WATCHER_TIMEOUT);
-        watcher.rx.try_iter();
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    fn macos_eat_late_notifications(watcher: &mut Watch) {
-        // If we're supposedly dealing with a late notification on
-        // macOS, we'd better not receive any messages on other
-        // platforms.
-        //
-        // If we do receive any notifications, our test is broken.
-        assert_none_within(watcher, WATCHER_TIMEOUT);
+        (if cfg!(target_os = "macos") {
+            Watch::new_impl(logger, Some(WATCHER_TIMEOUT))
+        } else {
+            Watch::new_impl(logger, None)
+        })
+        .expect("failed creating watch")
     }
 
     #[test]
     fn trivial_watch_whole_directory() {
-        let mut watcher = Watch::new(crate::logging::test_logger()).expect("failed creating Watch");
-        with_test_tempdir(|t| {
+        let logger = crate::logging::test_logger("trivial_watch_whole_directory");
+        let watcher = mk_test_watch(&logger);
+        with_test_tempdir("trivial_watch_whole_directory", |t| {
             expect_bash(r#"mkdir -p "$1"/foo"#, [t]);
             expect_bash(r#"touch "$1"/foo/bar"#, [t]);
             watcher
-                .extend(vec![WatchPathBuf::Recursive(t.to_path_buf())])
+                .add_to_watch_tx
+                .send(vec![WatchPathBuf::Recursive(t.to_path_buf())])
                 .unwrap();
 
             expect_bash(r#"echo 1 > "$1/baz""#, [t]);
@@ -475,33 +620,35 @@ mod tests {
 
     #[test]
     fn trivial_watch_directory_not_recursively() {
-        let mut watcher = Watch::new(crate::logging::test_logger()).expect("failed creating Watch");
-        with_test_tempdir(|t| {
+        let logger = crate::logging::test_logger("trivial_watch_directory_not_recursively");
+        let watcher = mk_test_watch(&logger);
+        with_test_tempdir("trivial_watch_directory_not_recursively", |t| {
             expect_bash(r#"mkdir -p "$1"/foo"#, [t]);
             expect_bash(r#"touch "$1"/foo/bar"#, [t]);
             watcher
-                .extend(vec![WatchPathBuf::Normal(t.to_path_buf())])
+                .add_to_watch_tx
+                .send(vec![WatchPathBuf::Normal(t.to_path_buf())])
                 .unwrap();
 
             expect_bash(r#"touch "$1/baz""#, [t]);
             assert_file_changed_within(&watcher, "baz", WATCHER_TIMEOUT);
 
             expect_bash(r#"echo 1 > "$1/foo/bar""#, [t]);
-            assert_none_within(&watcher, WATCHER_TIMEOUT);
+            assert_none_within(&watcher, WATCHER_TIMEOUT, None, &logger);
         })
     }
-
     #[test]
     fn trivial_watch_specific_file() {
-        let mut watcher = Watch::new(crate::logging::test_logger()).expect("failed creating Watch");
+        let logger = crate::logging::test_logger("trivial_watch_specific_file");
+        let watcher = mk_test_watch(&logger);
 
-        with_test_tempdir(|t| {
+        with_test_tempdir("trivial_watch_specific_file", |t| {
             expect_bash(r#"mkdir -p "$1""#, [t]);
             expect_bash(r#"touch "$1/foo""#, [t]);
             watcher
-                .extend(vec![WatchPathBuf::Recursive(t.join("foo"))])
+                .add_to_watch_tx
+                .send(vec![WatchPathBuf::Recursive(t.join("foo"))])
                 .unwrap();
-            macos_eat_late_notifications(&mut watcher);
 
             expect_bash(r#"echo 1 > "$1/foo""#, [t]);
             sleep(WATCHER_TIMEOUT);
@@ -509,41 +656,43 @@ mod tests {
         })
     }
 
-    // TODO: this test is bugged, but in order to figure out what is wrong, we should add some sort of provenance to our watcher filter functions first.
-    // #[test]
-    // fn rename_over_vim() {
-    //     // Vim renames files in to place for atomic writes
-    //     let mut watcher = Watch::new(crate::logging::test_logger()).expect("failed creating Watch");
+    // TODO: this test is bugged, but in order to figure out what is wrong,
+    // we should add some sort of provenance to our watcher filter functions first.
+    #[test]
+    fn rename_over_vim() {
+        // Vim renames files in to place for atomic writes
+        let logger = crate::logging::test_logger("rename_over_vim");
+        let watcher = mk_test_watch(&logger);
 
-    //     with_test_tempdir(|t| {
-    //         expect_bash(r#"mkdir -p "$1""#, [t]);
-    //         expect_bash(r#"touch "$1/foo""#, [t]);
-    //         watcher
-    //             .extend(vec![WatchPathBuf::Recursive(t.join("foo"))])
-    //             .unwrap();
-    //         macos_eat_late_notifications(&mut watcher);
+        with_test_tempdir("rename_over_vim", |t| {
+            expect_bash(r#"mkdir -p "$1""#, [t]);
+            expect_bash(r#"touch "$1/foo""#, [t]);
+            watcher
+                .add_to_watch_tx
+                .send(vec![WatchPathBuf::Recursive(t.join("foo"))])
+                .unwrap();
 
-    //         // bar is not watched, expect error
-    //         expect_bash(r#"echo 1 > "$1/bar""#, [t]);
-    //         assert_none_within(&watcher, WATCHER_TIMEOUT);
+            info!(&logger, "bar is not watched, expect error");
+            expect_bash(r#"echo 1 > "$1/bar""#, [t]);
+            assert_none_within(&watcher, WATCHER_TIMEOUT, Some(&vec!["/bar"]), &logger);
 
-    //         // Rename bar to foo, expect a notification
-    //         expect_bash(r#"mv "$1/bar" "$1/foo""#, [t]);
-    //         assert_file_changed_within(&watcher, "foo", WATCHER_TIMEOUT);
+            info!(&logger, "Rename bar to foo, expect a notification");
+            expect_bash(r#"mv "$1/bar" "$1/foo""#, [t]);
+            assert_file_changed_within(&watcher, "foo", WATCHER_TIMEOUT);
 
-    //         // Do it a second time
-    //         expect_bash(r#"echo 1 > "$1/bar""#, [t]);
-    //         assert_none_within(&watcher, WATCHER_TIMEOUT);
+            info!(&logger, "Do it a second time");
+            expect_bash(r#"echo 1 > "$1/bar""#, [t]);
+            assert_none_within(&watcher, WATCHER_TIMEOUT, None, &logger);
 
-    //         // Rename bar to foo, expect a notification
-    //         expect_bash(r#"mv "$1/bar" "$1/foo""#, [t]);
-    //         assert_file_changed_within(&watcher, "foo", WATCHER_TIMEOUT);
-    //     })
-    // }
+            info!(&logger, "Rename bar to foo, expect a notification");
+            expect_bash(r#"mv "$1/bar" "$1/foo""#, [t]);
+            assert_file_changed_within(&watcher, "foo", WATCHER_TIMEOUT);
+        })
+    }
 
     #[test]
     fn walk_path_topo_filetree() {
-        with_test_tempdir(|t| {
+        with_test_tempdir("walk_path_topo_filetree", |t| {
             let files = vec![("a", "b"), ("a", "c"), ("a/d", "e"), ("x/y", "z")];
             for (dir, file) in files {
                 std::fs::create_dir_all(t.join(dir)).unwrap();

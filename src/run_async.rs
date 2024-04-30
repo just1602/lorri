@@ -13,10 +13,21 @@ pub struct Async<Res> {
     result_chan: chan::Receiver<Res>,
     /// whether the thread should linger (aka detach) after this Async is dropped
     linger: bool,
+    /// Stop signal that gets sent to the thread that potentially signed up for it
+    stop_signal_tx: Option<chan::Sender<StopSignal>>,
 }
+
+/// A stop signal sent to the async thread when it should stop what it’s doing.
+pub struct StopSignal();
 
 impl<Res> Drop for Async<Res> {
     fn drop(&mut self) {
+        // send the thread the stop signal if it requested it
+        if let Some(stop_signal) = self.stop_signal_tx.as_ref() {
+            stop_signal
+                .send(StopSignal())
+                .expect("The async thread was not ready to receive the stop message it requested")
+        }
         // when the Async should not linger, we have to wait for it to finish here.
         if !self.linger {
             self.thread
@@ -25,6 +36,10 @@ impl<Res> Drop for Async<Res> {
         }
     }
 }
+
+/// This value should be returned from a thread when the stop signal has been received. Do not construct (TODO: how to prevent other modules from constructing?)
+#[derive(Debug)]
+pub struct StopReceived();
 
 impl<Res: Send + 'static> Async<Res> {
     /// Create a new Async that runs a function in a thread.
@@ -38,7 +53,25 @@ impl<Res: Send + 'static> Async<Res> {
         F: std::panic::UnwindSafe,
         F: Send + 'static,
     {
-        Self::run_inner(logger, f, false)
+        Self::run_inner(logger, f, false, None)
+    }
+
+    /// Create a new Async that runs a function in a thread.
+    ///
+    /// You can read the result either by blocking
+    /// or by using the `chan` method to get a channel that receives exactly
+    /// one result as soon as the the function is done.
+    ///
+    /// The function *should* listen on the stop signal channel
+    /// so that it can abort and be joined when it is requested to.
+    pub fn run_with_stop_signal<F>(logger: &slog::Logger, f: F) -> Self
+    where
+        F: FnOnce(chan::Receiver<StopSignal>) -> Res,
+        F: std::panic::UnwindSafe,
+        F: Send + 'static,
+    {
+        let (stop_signal_tx, stop_signal_rx) = chan::bounded(1);
+        Self::run_inner(logger, || f(stop_signal_rx), false, Some(stop_signal_tx))
     }
 
     /// Create a new Async that runs a function in a thread.
@@ -56,10 +89,15 @@ impl<Res: Send + 'static> Async<Res> {
         F: std::panic::UnwindSafe,
         F: Send + 'static,
     {
-        Self::run_inner(logger, f, true)
+        Self::run_inner(logger, f, true, None)
     }
 
-    fn run_inner<F>(logger: &slog::Logger, f: F, linger: bool) -> Self
+    fn run_inner<F>(
+        logger: &slog::Logger,
+        f: F,
+        linger: bool,
+        stop_signal_tx: Option<chan::Sender<StopSignal>>,
+    ) -> Self
     where
         F: FnOnce() -> Res,
         F: std::panic::UnwindSafe,
@@ -80,6 +118,7 @@ impl<Res: Send + 'static> Async<Res> {
             thread,
             result_chan: rx,
             linger,
+            stop_signal_tx,
         }
     }
 
@@ -112,13 +151,20 @@ impl<Res: Send + 'static> Async<Res> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    };
+
     use super::*;
 
     #[test]
     fn test_chan_drop_order() {
         // we make the async just block on a channel which we can control from outside
         let (tx, rx) = chan::bounded(1);
-        let a = Async::run(&crate::logging::test_logger(), move || rx.recv());
+        let a = Async::run(&crate::logging::test_logger("chan_drop_order"), move || {
+            rx.recv()
+        });
         let c = a.chan();
         // nothing has been sent to the thread yet, so timeout
         assert_eq!(
@@ -138,7 +184,10 @@ mod tests {
     #[test]
     fn test_chan_block_still_works() {
         // check that even after getting a channel the blocking still works
-        let a = Async::run(&crate::logging::test_logger(), move || 42);
+        let a = Async::run(
+            &crate::logging::test_logger("chan_block_still_works"),
+            move || 42,
+        );
         let c = a.chan();
         assert_eq!(a.block(), 42);
         // would be disconnected, because the result was already retrieved by the block
@@ -150,5 +199,24 @@ mod tests {
             Err(chan::RecvTimeoutError::Disconnected)
         );
         // At least you can’t block twice, because the .block() call consumes the Async
+    }
+
+    #[test]
+    /// Checks that the stop signal is sent as expected, and allows the thread to be joined.
+    fn test_stop_signal() {
+        let was_stopped = Arc::new(AtomicBool::new(false));
+        let was_stopped2 = was_stopped.clone();
+
+        let a = Async::run_with_stop_signal(
+            &crate::logging::test_logger("stop_signal"),
+            move |stop_signal_rx| {
+                chan::select! {
+                    recv(stop_signal_rx) -> _ => { was_stopped2.store(true, Ordering::Relaxed) }
+                }
+            },
+        );
+
+        drop(a);
+        assert_eq!(was_stopped.load(Ordering::Relaxed), true)
     }
 }

@@ -17,8 +17,8 @@ pub fn root(verbosity: Verbosity) -> slog::Logger {
 }
 
 /// Logger that can be used in tests
-pub fn test_logger() -> slog::Logger {
-    lorri_logger(slog::Level::Trace)
+pub fn test_logger(name: &str) -> slog::Logger {
+    lorri_logger(slog::Level::Trace).new(slog::o!("lorri_test" => name.to_string()))
 }
 
 fn lorri_logger(level: slog::Level) -> slog::Logger {

@@ -589,7 +589,7 @@ in {}
             &crate::NixFile::from(cas.file_from_string(&nix_drv)?),
             &cas,
             &NixOptions::empty(),
-            &crate::logging::test_logger(),
+            &crate::logging::test_logger("non_utf8_nix_output"),
         )
         .expect("should not crash!");
         Ok(())
@@ -610,7 +610,7 @@ in {}
             &d,
             &cas,
             &NixOptions::empty(),
-            &crate::logging::test_logger(),
+            &crate::logging::test_logger("gracefully_handle_failing_build"),
         ) {
         } else {
             assert!(
@@ -673,7 +673,7 @@ dir-as-source = ./dir;
             &NixFile::from(AbsPathBuf::new(shell).unwrap()),
             &cas,
             &NixOptions::empty(),
-            &crate::logging::test_logger(),
+            &crate::logging::test_logger("no_unnecessary_files_or_directories_watched"),
         )
         .unwrap();
         let ends_with = |end| {

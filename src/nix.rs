@@ -240,7 +240,7 @@ impl<'a> CallOpts<'a> {
     ///             import <nixpkgs> {}
     /// "#)
     ///         .attribute("hello")
-    ///         .path(&lorri::logging::test_logger())
+    ///         .path(&lorri::logging::test_logger("doctest_path_1"))
     ///         .unwrap()
     ///         ;
     ///
@@ -270,7 +270,7 @@ impl<'a> CallOpts<'a> {
     /// let paths = nix::CallOpts::expression(r#"
     ///             { inherit (import <nixpkgs> {}) hello git; }
     /// "#)
-    ///         .path(&lorri::logging::test_logger());
+    ///         .path(&lorri::logging::test_logger("doctest_path_2"));
     ///
     /// match paths {
     ///    Err(BuildError::Output { .. }) => {},
@@ -310,7 +310,7 @@ impl<'a> CallOpts<'a> {
     /// let (paths, gc_root) = nix::CallOpts::expression(r#"
     ///             { inherit (import <nixpkgs> {}) hello git; }
     /// "#)
-    ///         .paths(&lorri::logging::test_logger())
+    ///         .paths(&lorri::logging::test_logger("doctest_paths"))
     ///         .unwrap();
     /// let mut paths = paths
     ///         .into_iter()

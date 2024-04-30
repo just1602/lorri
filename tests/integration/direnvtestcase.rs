@@ -46,7 +46,7 @@ impl DirenvTestCase {
             projectdir,
             cachedir: cachedir_tmp,
             project,
-            logger: lorri::logging::test_logger(),
+            logger: lorri::logging::test_logger("direnv_test_case"),
         }
     }
 
