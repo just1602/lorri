@@ -72,10 +72,22 @@ pub struct Watch {
 impl Watch {
     /// Instantiate a new Watch.
     pub fn new(logger: &slog::Logger) -> Result<Watch, notify::Error> {
+        Self::new_impl(logger, None)
+    }
+
+    fn new_impl(
+        logger: &slog::Logger,
+        drop_first_event_within: Option<Duration>,
+    ) -> Result<Watch, notify::Error> {
         let (filtered_events_tx, filtered_events_rx) = chan::unbounded();
         let (user_requests_tx, user_requests_rx) = chan::unbounded();
 
-        let mut filter = Mutex::new(Filter::new(user_requests_rx, filtered_events_tx, logger)?);
+        let mut filter = Mutex::new(Filter::new(
+            user_requests_rx,
+            filtered_events_tx,
+            drop_first_event_within,
+            logger,
+        )?);
         let watch_thread = Async::run_with_stop_signal(logger, move |stop_signal_rx| {
             filter
                 .get_mut()
@@ -112,6 +124,8 @@ struct Filter {
     filtered_events_tx: Sender<Vec<PathBuf>>,
     /// Set of currently watched paths
     current_watched: HashSet<PathBuf>,
+    // Whether to drop the first event if it arrives faster than the given duration (hack for macos tests)
+    drop_first_event_within: Option<Duration>,
     logger: slog::Logger,
 }
 
@@ -119,6 +133,7 @@ impl Filter {
     fn new(
         user_requests_rx: Receiver<Vec<WatchPathBuf>>,
         filtered_events_tx: Sender<Vec<PathBuf>>,
+        drop_first_event_within: Option<Duration>,
         logger: &slog::Logger,
     ) -> notify::Result<Self> {
         let (filesystem_events_tx, filesystem_events_rx) = chan::unbounded();
@@ -134,11 +149,22 @@ impl Filter {
             filtered_events_tx,
             current_watched: HashSet::new(),
             logger: logger.clone(),
+            drop_first_event_within,
         })
     }
 
     fn loop_on_events(&mut self, stop_signal_rx: chan::Receiver<StopSignal>) {
         loop {
+            let mut drop_event = false;
+            let drop_first_event_within_rx = if let Some(dur) = self.drop_first_event_within {
+                drop_event = true;
+                chan::after(dur)
+            } else {
+                chan::never()
+            };
+            // make sure this only happens during the first loop
+            self.drop_first_event_within = None;
+
             select! {
 
                 // stop this watcher
@@ -147,9 +173,18 @@ impl Filter {
                     break;
                 },
 
+                // potentially drop the first message
+                recv(drop_first_event_within_rx) -> _ => {
+                    debug!(self.logger, "No event arrived within the initial drop timeout."; "duration" => ?self.drop_first_event_within);
+                }
+
                 // Handle file events
                 recv(self.filesystem_events_rx) -> msg => match msg {
                     Ok( DebounceEventResult::Ok(event)) => {
+                        if drop_event {
+                            debug!(self.logger, "dropping event because drop_event was true"; "event" => ?event);
+                            continue
+                        }
                         let paths = self.process_watch_events(event);
                         if !paths.is_empty() {
                             if let Err(e) = self.filtered_events_tx.send(paths) {
@@ -527,8 +562,7 @@ mod tests {
         drop(temp);
     }
 
-    #[cfg(target_os = "macos")]
-    fn macos_eat_late_notifications(watcher: &mut Watch) {
+    fn mk_test_watch() -> Watch {
         // Sometimes a brand new watch will send a CREATE notification
         // for a file which was just created, even if the watch was
         // created after the file was made.
@@ -539,23 +573,17 @@ mod tests {
         //
         // Note, this is racey in the kernel. Otherwise I'd assert
         // this is empty.
-        sleep(WATCHER_TIMEOUT);
-        watcher.event_rx.try_iter();
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    fn macos_eat_late_notifications(watcher: &mut Watch) {
-        // If we're supposedly dealing with a late notification on
-        // macOS, we'd better not receive any messages on other
-        // platforms.
-        //
-        // If we do receive any notifications, our test is broken.
-        assert_none_within(watcher, WATCHER_TIMEOUT);
+        (if cfg!(target_os = "macos") {
+            Watch::new_impl(&crate::logging::test_logger(), Some(WATCHER_TIMEOUT))
+        } else {
+            Watch::new_impl(&crate::logging::test_logger(), None)
+        })
+        .expect("failed creating watch")
     }
 
     #[test]
     fn trivial_watch_whole_directory() {
-        let watcher = Watch::new(&crate::logging::test_logger()).expect("failed creating Watch");
+        let watcher = mk_test_watch();
         with_test_tempdir(|t| {
             expect_bash(r#"mkdir -p "$1"/foo"#, [t]);
             expect_bash(r#"touch "$1"/foo/bar"#, [t]);
@@ -574,7 +602,7 @@ mod tests {
 
     #[test]
     fn trivial_watch_directory_not_recursively() {
-        let watcher = Watch::new(&crate::logging::test_logger()).expect("failed creating Watch");
+        let watcher = mk_test_watch();
         with_test_tempdir(|t| {
             expect_bash(r#"mkdir -p "$1"/foo"#, [t]);
             expect_bash(r#"touch "$1"/foo/bar"#, [t]);
@@ -590,11 +618,9 @@ mod tests {
             assert_none_within(&watcher, WATCHER_TIMEOUT);
         })
     }
-
     #[test]
     fn trivial_watch_specific_file() {
-        let mut watcher =
-            Watch::new(&crate::logging::test_logger()).expect("failed creating Watch");
+        let watcher = mk_test_watch();
 
         with_test_tempdir(|t| {
             expect_bash(r#"mkdir -p "$1""#, [t]);
@@ -603,7 +629,6 @@ mod tests {
                 .add_to_watch_tx
                 .send(vec![WatchPathBuf::Recursive(t.join("foo"))])
                 .unwrap();
-            macos_eat_late_notifications(&mut watcher);
 
             expect_bash(r#"echo 1 > "$1/foo""#, [t]);
             sleep(WATCHER_TIMEOUT);
@@ -616,8 +641,7 @@ mod tests {
     #[test]
     fn rename_over_vim() {
         // Vim renames files in to place for atomic writes
-        let mut watcher =
-            Watch::new(&crate::logging::test_logger()).expect("failed creating Watch");
+        let watcher = mk_test_watch();
 
         with_test_tempdir(|t| {
             expect_bash(r#"mkdir -p "$1""#, [t]);
@@ -626,7 +650,6 @@ mod tests {
                 .add_to_watch_tx
                 .send(vec![WatchPathBuf::Recursive(t.join("foo"))])
                 .unwrap();
-            macos_eat_late_notifications(&mut watcher);
 
             // bar is not watched, expect error
             expect_bash(r#"echo 1 > "$1/bar""#, [t]);
