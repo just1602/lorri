@@ -417,6 +417,7 @@ fn walk_path_topo(path: PathBuf) -> Result<Vec<PathBuf>, std::io::Error> {
 #[cfg(test)]
 mod tests {
     use super::{Watch, WatchPathBuf};
+    use slog::info;
     use std::ffi::OsStr;
     use std::path::PathBuf;
     use std::thread::sleep;
@@ -645,6 +646,7 @@ mod tests {
     fn rename_over_vim() {
         // Vim renames files in to place for atomic writes
         let watcher = mk_test_watch("rename_over_vim");
+        let logger = &crate::logging::test_logger("rename_over_vim");
 
         with_test_tempdir("rename_over_vim", |t| {
             expect_bash(r#"mkdir -p "$1""#, [t]);
@@ -654,19 +656,19 @@ mod tests {
                 .send(vec![WatchPathBuf::Recursive(t.join("foo"))])
                 .unwrap();
 
-            // bar is not watched, expect error
+            info!(logger, "bar is not watched, expect error");
             expect_bash(r#"echo 1 > "$1/bar""#, [t]);
             assert_none_within(&watcher, WATCHER_TIMEOUT);
 
-            // Rename bar to foo, expect a notification
+            info!(logger, "Rename bar to foo, expect a notification");
             expect_bash(r#"mv "$1/bar" "$1/foo""#, [t]);
             assert_file_changed_within(&watcher, "foo", WATCHER_TIMEOUT);
 
-            // Do it a second time
+            info!(logger, "Do it a second time");
             expect_bash(r#"echo 1 > "$1/bar""#, [t]);
             assert_none_within(&watcher, WATCHER_TIMEOUT);
 
-            // Rename bar to foo, expect a notification
+            info!(logger, "Rename bar to foo, expect a notification");
             expect_bash(r#"mv "$1/bar" "$1/foo""#, [t]);
             assert_file_changed_within(&watcher, "foo", WATCHER_TIMEOUT);
         })
