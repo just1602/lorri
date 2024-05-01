@@ -126,7 +126,6 @@ pub struct BuildLoop<'a> {
     /// Watches all input files for changes.
     /// As new input files are discovered, they are added to the watchlist.
     watch: Watch,
-    nix_gc_root_user_dir: project::NixGcRootUserDir,
     logger: slog::Logger,
 }
 
@@ -167,7 +166,6 @@ impl<'a> BuildLoop<'a> {
     pub fn new(
         project: &'a Project,
         extra_nix_options: NixOptions,
-        nix_gc_root_user_dir: project::NixGcRootUserDir,
         logger: slog::Logger,
     ) -> anyhow::Result<BuildLoop<'a>> {
         let watch = Watch::new(&logger).map_err(|err| anyhow!(err))?;
@@ -187,7 +185,6 @@ impl<'a> BuildLoop<'a> {
             project,
             extra_nix_options,
             watch,
-            nix_gc_root_user_dir,
             logger,
         })
     }
@@ -342,11 +339,7 @@ impl<'a> BuildLoop<'a> {
 
         // root the result
         self.project
-            .create_roots(
-                run_result.result,
-                self.nix_gc_root_user_dir.clone(),
-                &self.logger.clone(),
-            )
+            .create_roots(run_result.result)
             .map_err(BuildError::io)
     }
 }
