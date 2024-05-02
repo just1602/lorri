@@ -11,10 +11,6 @@ jobs:
           fetch-depth: 0
       - name: Nix
         uses: cachix/install-nix-action@v26
-      - name: Create user gcroot dir
-        run: |
-          sudo mkdir /nix/var/nix/gcroots/per-user/$USER
-          sudo chown $USER /nix/var/nix/gcroots/per-user/$USER
       - name: Cachix
         uses: cachix/cachix-action@v14
         with:
@@ -36,10 +32,6 @@ jobs:
           fetch-depth: 0
       - name: Nix
         uses: cachix/install-nix-action@v26
-      - name: Create user gcroot dir
-        run: |
-          sudo mkdir /nix/var/nix/gcroots/per-user/$USER
-          sudo chown $USER /nix/var/nix/gcroots/per-user/$USER
       - name: Cachix
         uses: cachix/cachix-action@v14
         with:
@@ -61,10 +53,6 @@ jobs:
           fetch-depth: null
       - name: Nix
         uses: cachix/install-nix-action@v26
-      - name: Create user gcroot dir
-        run: |
-          sudo mkdir /nix/var/nix/gcroots/per-user/$USER
-          sudo chown $USER /nix/var/nix/gcroots/per-user/$USER
       - name: Cachix
         uses: cachix/cachix-action@v14
         with:
@@ -82,10 +70,6 @@ jobs:
           fetch-depth: null
       - name: Nix
         uses: cachix/install-nix-action@v26
-      - name: Create user gcroot dir
-        run: |
-          sudo mkdir /nix/var/nix/gcroots/per-user/$USER
-          sudo chown $USER /nix/var/nix/gcroots/per-user/$USER
       - name: Cachix
         uses: cachix/cachix-action@v14
         with:
@@ -103,10 +87,6 @@ jobs:
           fetch-depth: null
       - name: Nix
         uses: cachix/install-nix-action@v26
-      - name: Create user gcroot dir
-        run: |
-          sudo mkdir /nix/var/nix/gcroots/per-user/$USER
-          sudo chown $USER /nix/var/nix/gcroots/per-user/$USER
       - name: Cachix
         uses: cachix/cachix-action@v14
         with:
@@ -141,10 +121,6 @@ jobs:
           fetch-depth: null
       - name: Nix
         uses: cachix/install-nix-action@v26
-      - name: Create user gcroot dir
-        run: |
-          sudo mkdir /nix/var/nix/gcroots/per-user/$USER
-          sudo chown $USER /nix/var/nix/gcroots/per-user/$USER
       - name: Cachix
         uses: cachix/cachix-action@v14
         with:

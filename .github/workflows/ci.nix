@@ -13,13 +13,6 @@ let
     name = "Nix";
     uses = "cachix/install-nix-action@v26";
   };
-  create-nix-gcroots-user-dir = {
-    name = "Create user gcroot dir";
-    run = ''
-      sudo mkdir /nix/var/nix/gcroots/per-user/$USER
-      sudo chown $USER /nix/var/nix/gcroots/per-user/$USER
-    '';
-  };
   setup-cachix = {
     name = "Cachix";
     uses = "cachix/cachix-action@v14";
@@ -60,7 +53,6 @@ let
         steps = [
           (checkout {})
           setup-nix
-          create-nix-gcroots-user-dir
           setup-cachix
           add-rustc-to-path
           print-path
@@ -98,7 +90,6 @@ let
             }
           )
           setup-nix
-          create-nix-gcroots-user-dir
           setup-cachix
           {
             name = "Build";
@@ -124,7 +115,6 @@ let
         steps = [
           (checkout {})
           setup-nix
-          create-nix-gcroots-user-dir
           setup-cachix
           {
             name = "Build w/ overlay (stable)";
