@@ -5,7 +5,7 @@ use thiserror::Error;
 use crate::builder::{OutputPath, RootedPath};
 use crate::cas::ContentAddressable;
 use crate::nix::StorePath;
-use crate::{AbsPathBuf, NixFile};
+use crate::{AbsPathBuf, Installable, NixFile};
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
@@ -16,7 +16,7 @@ use std::process::{Command, Stdio};
 #[derive(Clone)]
 pub struct Project {
     /// Absolute path to this project’s nix file.
-    pub nix_file: NixFile,
+    pub file: ProjectFile,
 
     /// Directory in which this project’s
     /// garbage collection roots are stored.
@@ -29,6 +29,56 @@ pub struct Project {
     pub cas: ContentAddressable,
 }
 
+/// ProjectFile describes the build source Nix file for a watched project
+/// Could be a shell.nix (or similar) or a Flake description
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub enum ProjectFile {
+    /// A shell.nix (or default.nix etc)
+    ShellNix(NixFile),
+    /// A Flake installable - captures the flake target itself (e.g. .#)
+    /// and the context directory to resolve it from
+    FlakeNix(Installable),
+}
+
+impl ProjectFile {
+    /// Creates a ProjectFile::FlakeNix from a context and installable
+    /// c.f. https://nix.dev/manual/nix/2.18/command-ref/new-cli/nix3-flake#description
+    pub fn flake(context: AbsPathBuf, installable: String) -> Self {
+        ProjectFile::FlakeNix(Installable {
+            context,
+            installable,
+        })
+    }
+    /// Proxy through the `Display` class for `PathBuf`.
+    //    pub fn display(&self) -> std::path::Display {
+    //        self.as_absolute_path().display()
+    //    }
+
+    /// Convert into a `std::path::PathBuf`
+    pub fn as_absolute_path(&self) -> PathBuf {
+        self.as_nix_file().as_absolute_path().to_path_buf()
+    }
+
+    /// XXX temporary compatibility
+    pub fn as_nix_file(&self) -> NixFile {
+        match self {
+            ProjectFile::ShellNix(f) => f.clone(),
+            ProjectFile::FlakeNix(i) => i.context.join("flake.nix").into(),
+        }
+    }
+}
+
+impl slog::Value for ProjectFile {
+    fn serialize(
+        &self,
+        _record: &slog::Record,
+        key: slog::Key,
+        serializer: &mut dyn slog::Serializer,
+    ) -> slog::Result {
+        serializer.emit_arguments(key, &format_args!("{}", self.as_nix_file().display()))
+    }
+}
+
 impl Project {
     /// The name for the build output that's sourced in direnv to produce environment variables
     pub const ENV_CONTEXT: &'static str = "shell_gc_root";
@@ -36,44 +86,34 @@ impl Project {
     /// and the base GC root directory
     /// (as returned by `Paths.gc_root_dir()`),
     pub fn new(
-        nix_file: NixFile,
+        shell_file: NixFile,
         gc_root_dir: &AbsPathBuf,
         cas: ContentAddressable,
     ) -> std::io::Result<Project> {
         let hash = format!(
             "{:x}",
-            md5::compute(nix_file.as_absolute_path().as_os_str().as_bytes())
+            md5::compute(shell_file.as_absolute_path().as_os_str().as_bytes())
         );
         let project_gc_root = gc_root_dir.join(&hash).join("gc_root");
 
         std::fs::create_dir_all(&project_gc_root)?;
 
-        let nix_file_symlink = project_gc_root.clone().join("nix_file");
+        let nix_file_symlink = project_gc_root.join("nix_file");
         let (remove, create) = match std::fs::read_link(&nix_file_symlink) {
-            Ok(path) => {
-                if path == nix_file.as_absolute_path() {
-                    (false, false)
-                } else {
-                    (true, true)
-                }
-            }
-            Err(e) => {
-                if e.kind() == std::io::ErrorKind::NotFound {
-                    (false, true)
-                } else {
-                    (true, true)
-                }
-            }
+            Ok(path) if path == shell_file.as_absolute_path() => (false, false),
+            Ok(_) => (true, true),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => (false, true),
+            Err(_) => (true, true),
         };
         if remove {
             std::fs::remove_file(&nix_file_symlink)?;
         }
         if create {
-            std::os::unix::fs::symlink(nix_file.as_absolute_path(), nix_file_symlink)?;
+            std::os::unix::fs::symlink(shell_file.as_absolute_path(), nix_file_symlink)?;
         }
 
         Ok(Project {
-            nix_file,
+            file: ProjectFile::ShellNix(shell_file),
             gc_root_path: project_gc_root,
             hash,
             cas,
@@ -103,6 +143,14 @@ impl Project {
         &self,
         rooted_path: RootedPath,
     ) -> Result<OutputPath<RootPath>, AddRootError> {
+        for path in rooted_path.extra_paths {
+            let base = path
+                .as_path()
+                .file_name()
+                .ok_or_else(|| AddRootError::naming(path.as_path()))?
+                .into();
+            self.create_root(base, path)?;
+        }
         self.create_root(Self::ENV_CONTEXT.into(), rooted_path.path)
     }
 
@@ -178,6 +226,15 @@ impl AddRootError {
         AddRootError {
             source: std::io::Error::new(std::io::ErrorKind::Other, "nix failed"),
             msg: format!("nix build returned non-zero status for {}", path.display()),
+        }
+    }
+
+    /// A root path can't be properly named - because it doesn't have a filename
+    /// c.f. Path.filename()
+    fn naming(path: &Path) -> AddRootError {
+        AddRootError {
+            source: std::io::Error::new(std::io::ErrorKind::InvalidInput, "no filename"),
+            msg: format!("Could not determine a filename for {}", path.display()),
         }
     }
 }

@@ -116,8 +116,14 @@ impl Server {
                     }
                     CommunicationType::Ping => {
                         match handlers.ping().read(communicate::DEFAULT_READ_TIMEOUT) {
-                            Ok(Ping { nix_file, rebuild }) => tx_activity
-                                .send(IndicateActivity { nix_file, rebuild })
+                            Ok(Ping {
+                                project_file,
+                                rebuild,
+                            }) => tx_activity
+                                .send(IndicateActivity {
+                                    project_file,
+                                    rebuild,
+                                })
                                 .expect("Unable to send a ping from listener"),
                             Err(e) => err(communication_type, e),
                         }

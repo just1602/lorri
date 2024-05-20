@@ -1,3 +1,4 @@
+use lorri::project::ProjectFile;
 use lorri::{
     builder, cas::ContentAddressable, nix::options::NixOptions, ops, project::Project, AbsPathBuf,
     NixFile,
@@ -35,7 +36,7 @@ fn loads_env() {
             "shell",
             "--shell-file",
             project
-                .nix_file
+                .file
                 .as_absolute_path()
                 .as_os_str()
                 .to_str()
@@ -72,8 +73,10 @@ fn project(name: &str, cache_dir: &AbsPathBuf) -> Project {
     .expect("CARGO_MANIFEST_DIR was not absolute");
     let cas_dir = cache_dir.join("cas").to_owned();
     fs::create_dir_all(&cas_dir).expect("failed to create CAS directory");
+    let nixfile = NixFile::from(test_root.join("shell.nix"));
+    let project_file = ProjectFile::ShellNix(nixfile);
     Project::new(
-        NixFile::from(test_root.join("shell.nix")),
+        project_file.as_nix_file(),
         &cache_dir.join("gc_roots"),
         ContentAddressable::new(cas_dir).unwrap(),
     )
@@ -84,7 +87,7 @@ fn build(project: &Project, logger: &slog::Logger) -> PathBuf {
     project
         .create_roots(
             builder::run(
-                &project.nix_file,
+                &project.file.as_nix_file(),
                 &project.cas,
                 &NixOptions::empty(),
                 logger,

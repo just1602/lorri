@@ -6,6 +6,7 @@ pub mod server;
 use crate::build_loop::{BuildLoop, Event};
 use crate::nix::options::NixOptions;
 use crate::ops::error::ExitError;
+use crate::project::ProjectFile;
 use crate::socket::communicate;
 use crate::socket::path::SocketPath;
 use crate::{AbsPathBuf, NixFile};
@@ -14,8 +15,6 @@ use slog::debug;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
-/// Events created by the event loop.
-///
 /// Union of build_loop::Event and NewListener for internal use.
 pub enum LoopHandlerEvent {
     /// A new listener has joined for event streaming
@@ -33,7 +32,7 @@ pub enum LoopHandlerEvent {
 /// and forces a rebuild.
 pub struct IndicateActivity {
     /// This nix file should be build/watched by the daemon.
-    pub nix_file: NixFile,
+    pub project_file: ProjectFile,
     /// Determines when this activity will cause a rebuild.
     pub rebuild: communicate::Rebuild,
 }
@@ -183,12 +182,17 @@ impl Daemon {
 
         // For each build instruction, add the corresponding file
         // to the watch list.
-        for IndicateActivity { nix_file, rebuild } in rx_activity {
-            let project = crate::project::Project::new(nix_file, gc_root_dir, cas.clone())
-                // TODO: the project needs to create its gc root dir
-                .unwrap();
+        for IndicateActivity {
+            project_file,
+            rebuild,
+        } in rx_activity
+        {
+            let project =
+                crate::project::Project::new(project_file.as_nix_file(), gc_root_dir, cas.clone())
+                    // TODO: the project needs to create its gc root dir
+                    .unwrap();
 
-            let key = project.nix_file.clone();
+            let key = project.file.as_nix_file().clone();
             let project_is_watched = handler_threads.get(&key);
 
             let send_ping =
@@ -229,12 +233,12 @@ impl Daemon {
                             {
                                 tx_build_events
                                     .send(LoopHandlerEvent::BuildEvent(Event::Failure {
-                                        nix_file: project.nix_file.clone(),
+                                        nix_file: project.file.as_nix_file(),
                                         failure: crate::builder::BuildError::Io {
                                             msg: err
                                                 .context(format!(
                                                     "could not start the watcher for {}",
-                                                    &project.nix_file.display()
+                                                    &project.file.as_nix_file().display()
                                                 ))
                                                 .to_string(),
                                         },

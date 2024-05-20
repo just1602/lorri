@@ -71,7 +71,7 @@ pub struct Watch {
 
 impl Watch {
     /// Instantiate a new Watch.
-    pub fn new(logger: &slog::Logger) -> Result<Watch, notify::Error> {
+    pub fn try_new(logger: &slog::Logger) -> Result<Watch, notify::Error> {
         Self::new_impl(logger, None)
     }
 

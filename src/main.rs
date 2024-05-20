@@ -2,7 +2,7 @@ use lorri::cli::{Arguments, Command, Internal_, Verbosity};
 use lorri::logging;
 use lorri::ops;
 use lorri::ops::error::ExitError;
-use lorri::project::Project;
+use lorri::project::{Project, ProjectFile};
 use lorri::NixFile;
 use lorri::{constants, AbsPathBuf};
 use slog::{debug, error, o};
@@ -99,7 +99,7 @@ fn run_command(logger: &slog::Logger, opts: Arguments) -> Result<(), ExitError> 
     let with_project_resolved =
         |nix_file| -> std::result::Result<(Project, slog::Logger), ExitError> {
             let project = create_project(&lorri::ops::get_paths()?, nix_file)?;
-            let logger = logger.new(o!("nix_file" => project.nix_file.clone()));
+            let logger = logger.new(o!("nix_file" => project.file.clone()));
             Ok((project, logger))
         };
     let with_project = |nix_file| -> std::result::Result<(Project, slog::Logger), ExitError> {
@@ -116,7 +116,7 @@ fn run_command(logger: &slog::Logger, opts: Arguments) -> Result<(), ExitError> 
                 }
             };
             let (project, _logger) = with_project(&nix_file)?;
-            ops::op_info(&paths, project, &logger)
+            ops::op_info(&paths, project, logger)
         }
         Command::Gc(opts) => ops::gc(logger, opts),
         Command::Direnv(opts) => {
@@ -147,7 +147,7 @@ fn run_command(logger: &slog::Logger, opts: Arguments) -> Result<(), ExitError> 
         Command::Internal { command } => match command {
             Internal_::Ping_(opts) => {
                 let nix_file = find_nix_file(&opts.nix_file)?;
-                ops::op_ping(&paths, nix_file, logger)
+                ops::op_ping(&paths, ProjectFile::ShellNix(nix_file), logger)
             }
             Internal_::StartUserShell_(opts) => {
                 let (project, _logger) = with_project(&opts.nix_file)?;
