@@ -187,10 +187,9 @@ impl Daemon {
             rebuild,
         } in rx_activity
         {
-            let project =
-                crate::project::Project::new(project_file.as_nix_file(), gc_root_dir, cas.clone())
-                    // TODO: the project needs to create its gc root dir
-                    .unwrap();
+            let project = crate::project::Project::new(project_file, gc_root_dir, cas.clone())
+                // TODO: the project needs to create its gc root dir
+                .unwrap();
 
             let key = project.file.as_nix_file().clone();
             let project_is_watched = handler_threads.get(&key);

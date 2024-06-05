@@ -1,16 +1,17 @@
 use lorri::cli::{Arguments, Command, Internal_, Verbosity};
-use lorri::logging;
 use lorri::ops;
 use lorri::ops::error::ExitError;
 use lorri::project::{Project, ProjectFile};
-use lorri::NixFile;
 use lorri::{constants, AbsPathBuf};
+use lorri::{logging, AbsDirPathBuf};
 use slog::{debug, error, o};
 use std::env;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use structopt::StructOpt;
 
-const FLAKE_COMPAT_SHELL_SRC: &str = include_str!("./flake-compat-shell.nix");
+use anyhow::anyhow;
+const TRIVIAL_SHELL_SRC: &str = include_str!("./trivial-shell.nix");
+const DEFAULT_ENVRC: &str = include_str!("./default-envrc");
 
 fn main() {
     install_panic_handler();
@@ -58,35 +59,27 @@ fn install_signal_handler() {
     .expect("Error setting SIGINT and SIGTERM handler");
 }
 
-/// Reads a nix filename given by the user and either returns
-/// the `NixFile` type or exists with a helpful error message
-/// that instructs the user how to write a minimal `shell.nix`.
-fn find_nix_file(shellfile: &Path) -> Result<NixFile, ExitError> {
-    // use shell.nix from cwd
-    match AbsPathBuf::new_from_current_directory(shellfile) {
-        Err(err) => Err(ExitError::temporary(err)),
-        Ok(None) => Err(ExitError::user_error(
-            if PathBuf::from("flake.nix").exists() {
-                anyhow::anyhow!(
-                    "lorri does not currently natively support flakes.\nYou can use the following compatibility `shell.nix` to use lorri with flakes:\n\n\
-                    {}",
-                    FLAKE_COMPAT_SHELL_SRC
-                )
-            } else {
-                anyhow::anyhow!(
-                    "`{}` does not exist\n\
-                    You can use the following minimal `shell.nix` to get started:\n\n\
-                    {}",
-                    shellfile.display(),
-                    ops::TRIVIAL_SHELL_SRC
-                )
-            },
-        )),
-        Ok(Some(file)) => Ok(NixFile::from(file)),
-    }
+/// Search for `name` in the current directory.
+/// If `name` is an absolute path and a file, it returns the file.
+/// If it doesn’t exist, returns `None`.
+pub fn is_file_in_current_directory(name: &Path) -> anyhow::Result<Option<AbsPathBuf>> {
+    let path = AbsDirPathBuf::current_dir()
+        .unwrap_or_else(|orig| {
+            panic!(
+                "Expected `env::current_dir` to return an absolute path, but was {}",
+                orig
+            )
+        })
+        .relative_to(name.to_path_buf())
+        .map_err(|p| anyhow!("Current dir is not dir: {:?}", p))?;
+    Ok(if path.as_path().is_file() {
+        Some(path)
+    } else {
+        None
+    })
 }
 
-fn create_project(paths: &constants::Paths, shell_nix: NixFile) -> Result<Project, ExitError> {
+fn create_project(paths: &constants::Paths, shell_nix: ProjectFile) -> Result<Project, ExitError> {
     Project::new(shell_nix, paths.gc_root_dir(), paths.cas_store().clone()).map_err(|err| {
         ExitError::temporary(anyhow::anyhow!(err).context("Could not set up project paths"))
     })
@@ -96,31 +89,14 @@ fn create_project(paths: &constants::Paths, shell_nix: NixFile) -> Result<Projec
 fn run_command(logger: &slog::Logger, opts: Arguments) -> Result<(), ExitError> {
     let paths = lorri::ops::get_paths()?;
 
-    let with_project_resolved =
-        |nix_file| -> std::result::Result<(Project, slog::Logger), ExitError> {
-            let project = create_project(&lorri::ops::get_paths()?, nix_file)?;
-            let logger = logger.new(o!("nix_file" => project.file.clone()));
-            Ok((project, logger))
-        };
-    let with_project = |nix_file| -> std::result::Result<(Project, slog::Logger), ExitError> {
-        with_project_resolved(find_nix_file(nix_file)?)
-    };
-
     match opts.command {
         Command::Info(opts) => {
-            let nix_file = match opts.nix_file {
-                Some(f) => f,
-                None => {
-                    slog::info!(logger, "Printing info for `./shell.nix`. If you want info on a different project, pass `--shell-file`");
-                    PathBuf::from("./shell.nix")
-                }
-            };
-            let (project, _logger) = with_project(&nix_file)?;
-            ops::op_info(&paths, project, logger)
+            let (project, logger) = with_project(logger, &opts.source.try_into()?)?;
+            ops::op_info(&paths, project, &logger)
         }
         Command::Gc(opts) => ops::gc(logger, opts),
         Command::Direnv(opts) => {
-            let (project, logger) = with_project(&opts.nix_file)?;
+            let (project, logger) = with_project(logger, &opts.source.try_into()?)?;
             ops::op_direnv(
                 project,
                 &paths,
@@ -129,12 +105,12 @@ fn run_command(logger: &slog::Logger, opts: Arguments) -> Result<(), ExitError> 
             )
         }
         Command::Shell(opts) => {
-            let (project, logger) = with_project(&opts.nix_file)?;
+            let (project, logger) = with_project(logger, &opts.source.clone().try_into()?)?;
             ops::op_shell(project, opts, &logger)
         }
 
         Command::Watch(opts) => {
-            let (project, logger) = with_project(&opts.nix_file)?;
+            let (project, logger) = with_project(logger, &opts.source.clone().try_into()?)?;
             ops::op_watch(project, opts, &logger)
         }
         Command::Daemon(opts) => {
@@ -142,15 +118,12 @@ fn run_command(logger: &slog::Logger, opts: Arguments) -> Result<(), ExitError> 
             ops::op_daemon(opts, logger)
         }
         Command::Upgrade(opts) => ops::op_upgrade(opts, paths.cas_store(), logger),
-        Command::Init => ops::op_init(logger),
+        Command::Init => ops::op_init(TRIVIAL_SHELL_SRC, DEFAULT_ENVRC, logger),
 
         Command::Internal { command } => match command {
-            Internal_::Ping_(opts) => {
-                let nix_file = find_nix_file(&opts.nix_file)?;
-                ops::op_ping(&paths, ProjectFile::ShellNix(nix_file), logger)
-            }
+            Internal_::Ping_(opts) => ops::op_ping(&paths, opts.source.try_into()?, logger),
             Internal_::StartUserShell_(opts) => {
-                let (project, _logger) = with_project(&opts.nix_file)?;
+                let (project, _logger) = with_project(logger, &opts.source.clone().try_into()?)?;
                 ops::op_start_user_shell(project, opts)
             }
             Internal_::StreamEvents_(se) => ops::op_stream_events(&paths, se.kind, logger),
@@ -158,10 +131,21 @@ fn run_command(logger: &slog::Logger, opts: Arguments) -> Result<(), ExitError> 
     }
 }
 
+fn with_project(
+    logger: &slog::Logger,
+    project_file: &ProjectFile,
+) -> std::result::Result<(Project, slog::Logger), ExitError> {
+    let project = create_project(&lorri::ops::get_paths()?, project_file.clone())?;
+    let logger = logger.new(o!("nix_file" => project.file.clone()));
+    Ok((project, logger))
+}
+
 #[cfg(test)]
 mod tests {
+    use lorri::AbsPathBuf;
+
     use super::*;
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
 
     /// Try instantiating the trivial shell file we provide the user.
     #[test]
@@ -178,7 +162,7 @@ mod tests {
         let out = std::process::Command::new("nix-instantiate")
             // we can’t assume to have a <nixpkgs>, so use bogus-nixpkgs
             .args(["-I", &format!("nixpkgs={}", nixpkgs)])
-            .args(["--expr", ops::TRIVIAL_SHELL_SRC])
+            .args(["--expr", TRIVIAL_SHELL_SRC])
             .output()?;
         assert!(
             out.status.success(),
@@ -187,5 +171,21 @@ mod tests {
             std::str::from_utf8(&out.stderr).unwrap()
         );
         Ok(())
+    }
+    #[test]
+    fn test_locate_config_file() {
+        let mut path = PathBuf::from("shell.nix");
+        let result = is_file_in_current_directory(&path);
+        assert_eq!(
+            result
+                .unwrap()
+                .expect("Should find the shell.nix in this projects' root"),
+            AbsPathBuf::new(PathBuf::from(env!("CARGO_MANIFEST_DIR")))
+                .unwrap()
+                .join("shell.nix")
+        );
+        path.pop();
+        path.push("this-lorri-specific-file-probably-does-not-exist");
+        assert_eq!(None, is_file_in_current_directory(&path).unwrap());
     }
 }

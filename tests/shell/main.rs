@@ -76,7 +76,7 @@ fn project(name: &str, cache_dir: &AbsPathBuf) -> Project {
     let nixfile = NixFile::from(test_root.join("shell.nix"));
     let project_file = ProjectFile::ShellNix(nixfile);
     Project::new(
-        project_file.as_nix_file(),
+        project_file,
         &cache_dir.join("gc_roots"),
         ContentAddressable::new(cas_dir).unwrap(),
     )

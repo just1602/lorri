@@ -86,13 +86,13 @@ impl Project {
     /// and the base GC root directory
     /// (as returned by `Paths.gc_root_dir()`),
     pub fn new(
-        shell_file: NixFile,
+        file: ProjectFile,
         gc_root_dir: &AbsPathBuf,
         cas: ContentAddressable,
     ) -> std::io::Result<Project> {
         let hash = format!(
             "{:x}",
-            md5::compute(shell_file.as_absolute_path().as_os_str().as_bytes())
+            md5::compute(file.as_absolute_path().as_os_str().as_bytes())
         );
         let project_gc_root = gc_root_dir.join(&hash).join("gc_root");
 
@@ -100,7 +100,7 @@ impl Project {
 
         let nix_file_symlink = project_gc_root.join("nix_file");
         let (remove, create) = match std::fs::read_link(&nix_file_symlink) {
-            Ok(path) if path == shell_file.as_absolute_path() => (false, false),
+            Ok(path) if path == file.as_absolute_path() => (false, false),
             Ok(_) => (true, true),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => (false, true),
             Err(_) => (true, true),
@@ -109,11 +109,11 @@ impl Project {
             std::fs::remove_file(&nix_file_symlink)?;
         }
         if create {
-            std::os::unix::fs::symlink(shell_file.as_absolute_path(), nix_file_symlink)?;
+            std::os::unix::fs::symlink(file.as_absolute_path(), nix_file_symlink)?;
         }
 
         Ok(Project {
-            file: ProjectFile::ShellNix(shell_file),
+            file,
             gc_root_path: project_gc_root,
             hash,
             cas,

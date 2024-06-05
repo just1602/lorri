@@ -149,6 +149,10 @@ impl AbsPathBuf {
         // replacing the file name will never make the path relative
         Self::new_unchecked_normalized(&self.0.with_file_name(file_name))
     }
+    /// Proxy `file_name` for `PathBuf`
+    pub fn file_name(&self) -> Option<&OsStr> {
+        self.0.file_name()
+    }
 }
 
 impl AsRef<Path> for AbsPathBuf {

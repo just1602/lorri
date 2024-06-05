@@ -48,11 +48,6 @@ use crossbeam_channel as chan;
 use slog::{debug, info, warn};
 use thiserror::Error;
 
-/// `./trivial-shell.nix`
-pub const TRIVIAL_SHELL_SRC: &str = include_str!("./trivial-shell.nix");
-/// `./default-envrc`
-pub const DEFAULT_ENVRC: &str = include_str!("./default-envrc");
-
 /// Set up necessary directories or fail.
 pub fn get_paths() -> Result<crate::constants::Paths, error::ExitError> {
     crate::constants::Paths::initialize().map_err(|e| {
@@ -275,10 +270,14 @@ Lorri Daemon Status: {}
 ///
 /// See the documentation for lorri::cli::Command::Init for
 /// more details
-pub fn op_init(logger: &slog::Logger) -> Result<(), ExitError> {
+pub fn op_init(
+    default_shell: &str,
+    default_envrc: &str,
+    logger: &slog::Logger,
+) -> Result<(), ExitError> {
     create_if_missing(
         Path::new("./shell.nix"),
-        TRIVIAL_SHELL_SRC,
+        default_shell,
         "Make sure shell.nix is of a form that works with nix-shell.",
         logger,
     )
@@ -286,8 +285,8 @@ pub fn op_init(logger: &slog::Logger) -> Result<(), ExitError> {
 
     create_if_missing(
         Path::new("./.envrc"),
-        DEFAULT_ENVRC,
-        &format!("Please add the following code to the top of your .envrc to set up lorri support (with fallback for plain nix):\n```bash\n{}```\n.", DEFAULT_ENVRC),
+        default_envrc,
+        "Please add 'eval \"$(lorri direnv)\"' to .envrc to set up lorri support.",
         logger,
     )
     .map_err(ExitError::user_error)?;
