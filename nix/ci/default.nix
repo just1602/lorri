@@ -182,7 +182,7 @@ let
       description = "run cargo test";
       test = writeCargo "cargo-test"
         # the tests need bash and nix and direnv
-        (pathPrependBins [ pkgs.coreutils pkgs.bash pkgs.nix pkgs.direnv ])
+        (pathPrependBins [ pkgs.coreutils pkgs.bash pkgs.nix pkgs.direnv pkgs.git ])
         [ "test" "--no-fail-fast" ];
     };
 
