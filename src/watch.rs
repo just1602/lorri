@@ -107,12 +107,6 @@ impl Watch {
 #[derive(Clone, Debug, Serialize)]
 pub struct DebugMessage(pub String);
 
-#[derive(Debug, PartialEq, Eq)]
-struct FilteredOut<'a> {
-    reason: &'a str,
-    path: PathBuf,
-}
-
 struct Filter {
     /// The low-level watcher
     filesystem_watcher: Debouncer<RecommendedWatcher, FileIdMap>,
