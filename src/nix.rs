@@ -74,6 +74,12 @@ impl StorePath {
     }
 }
 
+impl From<PathBuf> for StorePath {
+    fn from(path: PathBuf) -> Self {
+        Self(path)
+    }
+}
+
 impl From<&std::ffi::OsStr> for StorePath {
     fn from(s: &std::ffi::OsStr) -> StorePath {
         StorePath(PathBuf::from(s.to_owned()))
@@ -91,6 +97,12 @@ impl From<std::ffi::OsString> for StorePath {
 #[derive(Debug)]
 #[allow(dead_code)]
 pub struct GcRootTempDir(tempfile::TempDir);
+
+impl From<tempfile::TempDir> for GcRootTempDir {
+    fn from(dir: tempfile::TempDir) -> Self {
+        Self(dir)
+    }
+}
 
 impl<'a> CallOpts<'a> {
     /// Create a CallOpts with the Nix expression `expr`.

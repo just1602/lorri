@@ -21,7 +21,7 @@ use crate::nix::options::NixOptions;
 use crate::nix::CallOpts;
 use crate::ops::direnv::{DirenvVersion, MIN_DIRENV_VERSION};
 use crate::ops::error::{ExitAs, ExitError, ExitErrorType};
-use crate::project::Project;
+use crate::project::{Project, ProjectFile};
 use crate::run_async::Async;
 use crate::socket::path::SocketPath;
 use crate::NixFile;
@@ -47,11 +47,6 @@ use crossbeam_channel as chan;
 
 use slog::{debug, info, warn};
 use thiserror::Error;
-
-/// `./trivial-shell.nix`
-pub const TRIVIAL_SHELL_SRC: &str = include_str!("./trivial-shell.nix");
-/// `./default-envrc`
-pub const DEFAULT_ENVRC: &str = include_str!("./default-envrc");
 
 /// Set up necessary directories or fail.
 pub fn get_paths() -> Result<crate::constants::Paths, error::ExitError> {
@@ -119,7 +114,7 @@ pub fn op_direnv<W: std::io::Write>(
             .map_err(ExitError::from)
             .and_then(|c| {
                 c.write(&client::Ping {
-                    nix_file: project.nix_file,
+                    project_file: project.file.clone(),
                     rebuild: client::Rebuild::OnlyIfNotYetWatching,
                 })?;
                 Ok(())
@@ -261,7 +256,7 @@ Lorri User GC Root Dir: {}
 Lorri Daemon Socket: {}
 Lorri Daemon Status: {}
 ",
-        project.nix_file.display(),
+        project.file.as_nix_file().display(),
         gc_root,
         paths.gc_root_dir().display(),
         paths.daemon_socket_file().display(),
@@ -275,10 +270,14 @@ Lorri Daemon Status: {}
 ///
 /// See the documentation for lorri::cli::Command::Init for
 /// more details
-pub fn op_init(logger: &slog::Logger) -> Result<(), ExitError> {
+pub fn op_init(
+    default_shell: &str,
+    default_envrc: &str,
+    logger: &slog::Logger,
+) -> Result<(), ExitError> {
     create_if_missing(
         Path::new("./shell.nix"),
-        TRIVIAL_SHELL_SRC,
+        default_shell,
         "Make sure shell.nix is of a form that works with nix-shell.",
         logger,
     )
@@ -286,8 +285,8 @@ pub fn op_init(logger: &slog::Logger) -> Result<(), ExitError> {
 
     create_if_missing(
         Path::new("./.envrc"),
-        DEFAULT_ENVRC,
-        &format!("Please add the following code to the top of your .envrc to set up lorri support (with fallback for plain nix):\n```bash\n{}```\n.", DEFAULT_ENVRC),
+        default_envrc,
+        "Please add 'eval \"$(lorri direnv)\"' to .envrc to set up lorri support.",
         logger,
     )
     .map_err(ExitError::user_error)?;
@@ -303,7 +302,7 @@ fn create_if_missing(
     logger: &slog::Logger,
 ) -> Result<(), io::Error> {
     if path.exists() {
-        info!(logger, "file {} already exists, skipping", path.display(); "path" => path.to_str(), "message" => msg);
+        info!(logger, "file already exists, skipping"; "path" => path.to_str(), "message" => msg);
         Ok(())
     } else {
         let mut f = File::create(path)?;
@@ -317,9 +316,13 @@ fn create_if_missing(
 ///
 /// Can be used together with `direnv`.
 /// See the documentation for lorri::cli::Command::Ping_ for details.
-pub fn op_ping(paths: &Paths, nix_file: NixFile, logger: &slog::Logger) -> Result<(), ExitError> {
+pub fn op_ping(
+    paths: &Paths,
+    project_file: ProjectFile,
+    logger: &slog::Logger,
+) -> Result<(), ExitError> {
     client::create(paths, client::Timeout::from_millis(500), logger)?.write(&client::Ping {
-        nix_file,
+        project_file,
         rebuild: client::Rebuild::Always,
     })?;
     Ok(())
@@ -379,9 +382,9 @@ pub fn op_shell(
                 "exec \"$1\" internal start-user-shell --shell-path=\"$2\" --shell-file=\"$3\"",
             ),
             OsStr::new("--"),
-            &lorri.as_os_str(),
+            lorri.as_os_str(),
             &shell,
-            project.nix_file.as_absolute_path().as_os_str(),
+            project.file.as_absolute_path().as_os_str(),
         ])
         .status()
         .expect("failed to execute bash");
@@ -431,12 +434,15 @@ fn build_root(
     });
 
     // TODO: add the ability to pass extra_nix_options to shell
-    let run_result = builder::run(
-        &project.nix_file,
-        &project.cas,
-        &crate::nix::options::NixOptions::empty(),
-        &logger2,
-    );
+    let run_result = match &project.file {
+        ProjectFile::ShellNix(nix_file) => builder::run(
+            nix_file,
+            &project.cas,
+            &crate::nix::options::NixOptions::empty(),
+            &logger2,
+        ),
+        ProjectFile::FlakeNix(installable) => builder::flake(installable, &logger2),
+    };
     building.store(false, Ordering::SeqCst);
     progress_thread.block();
 
@@ -985,7 +991,7 @@ fn list_roots(logger: &slog::Logger) -> Result<Vec<GcRootInfo>, ExitError> {
             Ok(m) => m.modified().unwrap_or(std::time::UNIX_EPOCH),
         };
         let nix_file_symlink = gc_root_dir.join("nix_file");
-        let nix_file = std::fs::read_link(&nix_file_symlink);
+        let nix_file = std::fs::read_link(nix_file_symlink);
         let alive = match &nix_file {
             Err(_) => false,
             Ok(path) => match std::fs::metadata(path) {
@@ -993,10 +999,7 @@ fn list_roots(logger: &slog::Logger) -> Result<Vec<GcRootInfo>, ExitError> {
                 Err(_) => false,
             },
         };
-        let nix_file = match nix_file {
-            Err(_) => None,
-            Ok(p) => Some(p),
-        };
+        let nix_file = nix_file.ok();
         res.push(GcRootInfo {
             gc_dir,
             nix_file,

@@ -10,6 +10,7 @@ use lorri::ops;
 use lorri::project;
 use lorri::project::Project;
 use lorri::AbsPathBuf;
+use lorri::Installable;
 use lorri::NixFile;
 
 use std::collections::HashMap;
@@ -29,24 +30,38 @@ pub struct DirenvTestCase {
 }
 
 impl DirenvTestCase {
-    pub fn new(name: &str) -> DirenvTestCase {
+    pub fn with_shell(name: &str) -> DirenvTestCase {
+        let test_root =
+            PathBuf::from_iter([env!("CARGO_MANIFEST_DIR"), "tests", "integration", name]);
+
+        let shell_file = NixFile::from(AbsPathBuf::new(test_root.join("shell.nix")).unwrap());
+        let project_file = project::ProjectFile::ShellNix(shell_file);
+        Self::new(project_file)
+    }
+
+    pub fn with_flake(name: &str) -> DirenvTestCase {
+        let test_root =
+            PathBuf::from_iter([env!("CARGO_MANIFEST_DIR"), "tests", "integration", name]);
+        let project_file = project::ProjectFile::FlakeNix(Installable {
+            context: AbsPathBuf::new(test_root).unwrap(),
+            installable: ".#".to_string(),
+        });
+        Self::new(project_file)
+    }
+
+    fn new(project_file: project::ProjectFile) -> DirenvTestCase {
         let projectdir = tempdir().expect("tempfile::tempdir() failed us!");
         let cachedir_tmp = tempdir().expect("tempfile::tempdir() failed us!");
         let cachedir = AbsPathBuf::new(cachedir_tmp.path().to_owned()).unwrap();
 
-        let test_root =
-            PathBuf::from_iter(&[env!("CARGO_MANIFEST_DIR"), "tests", "integration", name]);
-
-        let shell_file = NixFile::from(AbsPathBuf::new(test_root.join("shell.nix")).unwrap());
-
-        let cas = ContentAddressable::new(cachedir.join("cas").to_owned()).unwrap();
-        let project = Project::new(shell_file.clone(), &cachedir.join("gc_roots"), cas).unwrap();
+        let cas = ContentAddressable::new(cachedir.join("cas")).unwrap();
+        let project = Project::new(project_file, &cachedir.join("gc_roots"), cas).unwrap();
 
         DirenvTestCase {
             projectdir,
             cachedir: cachedir_tmp,
             project,
-            logger: lorri::logging::test_logger("direnv_test_case"),
+            logger: lorri::logging::test_logger("direnv"),
         }
     }
 
@@ -60,8 +75,8 @@ impl DirenvTestCase {
     /// Run `direnv allow` and then `direnv export json`, and return
     /// the environment DirEnv would produce.
     pub fn get_direnv_variables(&self) -> DirenvEnv {
-        let envrc = File::create(self.projectdir.path().join(".envrc")).unwrap();
         let paths = lorri::ops::get_paths().unwrap();
+        let envrc = File::create(self.projectdir.path().join(".envrc")).unwrap();
         ops::op_direnv(self.project.clone(), &paths, envrc, &self.logger).unwrap();
 
         {
