@@ -6,6 +6,49 @@
     # Find the current version number with `git log --pretty=%h | wc -l`
     entries = [
       {
+        version = 957;
+        changes = ''
+          Add support for Nix Flakes. Lorri will still prefer a shell.nix by
+          default, but if overridden or only a flake.nix is available, Lorri
+          will build a flake and use its default devShell.
+
+        '';
+      }
+      {
+        version = 956;
+        changes = ''
+          Delegate adding roots to the nix-daemon. This improves a number of
+          use cases, especially for new users.
+        '';
+      }
+      {
+        version = 955;
+        changes = ''
+          Improvements to the watcher code, including smoother debounce of
+          filesystem events. This provides more reliable builds, and fewer
+          unneeded ones.
+        '';
+      }
+      {
+        version = 954;
+        changes = ''
+          Better output from lorri info, including information about the
+          project, and details about how lorri is running.
+        '';
+      }
+      {
+        version = 953;
+        changes = ''
+          Always log to stderr.
+        '';
+      }
+      {
+        version = 952;
+        changes = ''
+          Fix systemd configuration: replace ProjectHome with ProjectSystem.
+        '';
+      }
+      {
         version = 951;
         changes = ''
           Provide a better error message when the user tries to use flakes,
