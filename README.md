@@ -1,9 +1,5 @@
 # lorri
 
-Announcement: The IRC channel has moved to libera.chat, `#lorri`.
-We have been devoiced and de-oped by the freenode admins because of advertising this fact.
-If you still idle in `#lorri` on freenode, please come join us there.
-
 https://github.com/nix-community/lorri
 
 [![built with nix](https://builtwithnix.org/badge.svg)](https://builtwithnix.org)
@@ -13,9 +9,17 @@ lorri is a `nix-shell` replacement for project development. lorri is
 based around fast direnv integration for robust CLI and editor
 integration.
 
+When changes are made that would affect a project's developement shell,
+lorri builds the new shell in the background, and applies the result on the next
+shell prompt. The result is that development tools are kept in sync
+with the current Nix shell configuration (even e.g. as you switch branches)
+without blocking your use of the terminal.
+
 :point_right: **[Check out our blog post][lorri-blog-post] to see how lorri
 improves on the `nix-shell` experience during everyday development as well as
 in common scenarios like channel updates and Nix garbage collection.**
+
+lorri supports both `shell.nix` and `devShells` in `flake.nix` files.
 
 The project is about experimenting with and improving the developer's
 experience with Nix. A particular focus is managing your project's
