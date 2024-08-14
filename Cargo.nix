@@ -398,6 +398,7 @@ rec {
         version = "0.1.10";
         edition = "2018";
         sha256 = "08h80ihs74jcyp24cd75wwabygbbdgl05k6p5dmq8akbr78vv1a7";
+        libName = "cfg_if";
         authors = [
           "Alex Crichton <alex@alexcrichton.com>"
         ];
@@ -412,6 +413,7 @@ rec {
         version = "1.0.0";
         edition = "2018";
         sha256 = "1za0vb97n4brpzpv8lsbnzmq5r8f2b0cpqqr0sy8h5bn751xxwds";
+        libName = "cfg_if";
         authors = [
           "Alex Crichton <alex@alexcrichton.com>"
         ];
@@ -491,6 +493,7 @@ rec {
         version = "0.5.12";
         edition = "2021";
         sha256 = "159gp30clv2ci3r473659ii04pjznspb3g9gwkhj2lavkhmb0gdb";
+        libName = "crossbeam_channel";
         dependencies = [
           {
             name = "crossbeam-utils";
@@ -509,6 +512,7 @@ rec {
         version = "0.8.19";
         edition = "2021";
         sha256 = "0iakrb1b8fjqrag7wphl94d10irhbh2fw1g444xslsywqyn3p3i4";
+        libName = "crossbeam_utils";
         features = {
           "default" = [ "std" ];
           "loom" = [ "dep:loom" ];
@@ -598,6 +602,7 @@ rec {
         version = "2.0.0";
         edition = "2018";
         sha256 = "1q9kr151h9681wwp6is18750ssghz6j9j7qm7qi1ngcwy7mzi35r";
+        libName = "dirs_next";
         authors = [
           "The @xdg-rs members"
         ];
@@ -618,6 +623,7 @@ rec {
         version = "0.3.7";
         edition = "2015";
         sha256 = "19md1cnkazham8a6kh22v12d8hh3raqahfk6yb043vrjr68is78v";
+        libName = "dirs_sys";
         authors = [
           "Simon Ochsenreither <simon@ochsenreither.de>"
         ];
@@ -647,6 +653,7 @@ rec {
         version = "0.1.2";
         edition = "2018";
         sha256 = "0kavhavdxv4phzj4l0psvh55hszwnr0rcz8sxbvx20pyqi2a3gaf";
+        libName = "dirs_sys_next";
         authors = [
           "The @xdg-rs members"
         ];
@@ -758,6 +765,7 @@ rec {
         edition = "2021";
         crateBin = [];
         sha256 = "1jdg9xq830hghzrqkbnx8nda58a7z6mh8b6vlg5mj87v4l2ji135";
+        libName = "file_id";
         authors = [
           "Daniel Faust <hessijames@gmail.com>"
         ];
@@ -810,6 +818,7 @@ rec {
         version = "4.1.0";
         edition = "2018";
         sha256 = "1liz67v8b0gcs8r31vxkvm2jzgl9p14i78yfqx81c8sdv817mvkn";
+        libName = "fsevent_sys";
         authors = [
           "Pierre Baillet <pierre@baillet.name>"
         ];
@@ -826,6 +835,7 @@ rec {
         version = "0.1.1";
         edition = "2018";
         sha256 = "1fnkqrbz7ixxzsb04bsz9p0zzazanma8znfdqjvh39n14vapfvx0";
+        libName = "fuchsia_cprng";
         authors = [
           "Erick Tryzelaar <etryzelaar@google.com>"
         ];
@@ -943,6 +953,7 @@ rec {
         version = "0.1.19";
         edition = "2018";
         sha256 = "0cxcm8093nf5fyn114w8vxbrbcyvv91d4015rdnlgfll7cs6gd32";
+        libName = "hermit_abi";
         authors = [
           "Stefan Lankes"
         ];
@@ -965,6 +976,7 @@ rec {
         version = "0.3.9";
         edition = "2021";
         sha256 = "092hxjbjnq5fmz66grd9plxd0sh6ssg5fhgwwwqbrzgzkjwdycfj";
+        libName = "hermit_abi";
         authors = [
           "Stefan Lankes"
         ];
@@ -985,6 +997,7 @@ rec {
         src = if ((lib.versionOlder builtins.nixVersion "2.4pre20211007") || (lib.versionOlder "2.5" builtins.nixVersion ))
           then lib.cleanSourceWith { filter = sourceFilter;  src = ./vendor/human-panic; }
           else ./vendor/human-panic;
+        libName = "human_panic";
         authors = [
           "Yoshua Wuyts <yoshuawuyts@gmail.com>"
           "Pascal Hertleif <killercup@gmail.com>"
@@ -1058,6 +1071,7 @@ rec {
         version = "0.1.5";
         edition = "2015";
         sha256 = "1syhjgvkram88my04kv03s0zwa66mdwa5v7ddja3pzwvx2sh4p70";
+        libName = "inotify_sys";
         authors = [
           "Hanno Braun <hb@hannobraun.de>"
         ];
@@ -1096,6 +1110,7 @@ rec {
         version = "0.4.12";
         edition = "2018";
         sha256 = "12vk6g0f94zlxl6mdh5gc4jdjb469n9k9s7y3vb0iml05gpzagzj";
+        libName = "is_terminal";
         authors = [
           "softprops <d.tangren@gmail.com>"
           "Dan Gohman <dev@sunfishcode.online>"
@@ -1164,6 +1179,7 @@ rec {
         version = "1.0.4";
         edition = "2018";
         sha256 = "12w3wi90y4kwis4k9g6fp0kqjdmc6l00j16g8mgbhac7vbzjb5pd";
+        libName = "kqueue_sys";
         authors = [
           "William Orr <will@worrbase.com>"
           "Daniel (dmilith) Dettlaff <dmilith@me.com>"
@@ -1240,6 +1256,7 @@ rec {
         version = "0.4.13";
         edition = "2021";
         sha256 = "172k2c6422gsc914ig8rh99mb9yc7siw6ikc3d9xw1k7vx0s3k81";
+        libName = "linux_raw_sys";
         authors = [
           "Dan Gohman <dev@sunfishcode.online>"
         ];
@@ -1303,7 +1320,7 @@ rec {
       };
       "lorri" = rec {
         crateName = "lorri";
-        version = "1.7.0";
+        version = "1.7.1";
         edition = "2021";
         crateBin = [
           {
@@ -1824,6 +1841,7 @@ rec {
         version = "0.1.0";
         edition = "2021";
         sha256 = "1ndiyg82q73783jq18isi71a7mjh56wxrk52rlvyx0mi5z9ibmai";
+        libName = "num_conv";
         authors = [
           "Jacob Pratt <jacob@jhpratt.dev>"
         ];
@@ -1834,6 +1852,7 @@ rec {
         version = "0.2.18";
         edition = "2018";
         sha256 = "0yjib8p2p9kzmaz48xwhs69w5dh1wipph9jgnillzd2x33jz03fs";
+        libName = "num_traits";
         authors = [
           "The Rust Project Developers"
         ];
@@ -2002,6 +2021,7 @@ rec {
         version = "0.2.17";
         edition = "2018";
         sha256 = "1pp6g52aw970adv3x2310n7glqnji96z0a9wiamzw89ibf0ayh2v";
+        libName = "ppv_lite86";
         authors = [
           "The CryptoCorrosion Contributors"
         ];
@@ -2015,6 +2035,7 @@ rec {
         version = "0.4.30";
         edition = "2015";
         sha256 = "0nd71fl24sys066jrha6j7i34nfkjv44yzw8yww9742wmc8j0gfg";
+        libName = "proc_macro2";
         authors = [
           "Alex Crichton <alex@alexcrichton.com>"
         ];
@@ -2034,6 +2055,7 @@ rec {
         version = "1.0.79";
         edition = "2021";
         sha256 = "0bn004ybzdqid81cqppr5c9jrvqsxv50x60sxc41cwpmk0igydg8";
+        libName = "proc_macro2";
         authors = [
           "David Tolnay <dtolnay@gmail.com>"
           "Alex Crichton <alex@alexcrichton.com>"
@@ -2125,6 +2147,7 @@ rec {
         version = "1.2.3";
         edition = "2015";
         sha256 = "1q6za3v78hsspisc197bg3g7rpc989qycy8ypr8ap8igv10ikl51";
+        libName = "quick_error";
         authors = [
           "Paul Colomiets <paul@colomiets.name>"
           "Colin Kiegel <kiegel@gmx.de>"
@@ -2564,6 +2587,7 @@ rec {
         version = "0.4.6";
         edition = "2021";
         sha256 = "1spaq7y4im7s56d1gxa2hi4hzf6dwswb1bv8xyavzya7k25kpf46";
+        libName = "regex_automata";
         authors = [
           "The Rust Project Developers"
           "Andrew Gallant <jamslam@gmail.com>"
@@ -2624,6 +2648,7 @@ rec {
         version = "0.6.29";
         edition = "2018";
         sha256 = "1qgj49vm6y3zn1hi09x91jvgkl2b1fiaq402skj83280ggfwcqpi";
+        libName = "regex_syntax";
         authors = [
           "The Rust Project Developers"
         ];
@@ -2638,6 +2663,7 @@ rec {
         version = "0.8.3";
         edition = "2021";
         sha256 = "0mhzkm1pkqg6y53xv056qciazlg47pq0czqs94cn302ckvi49bdd";
+        libName = "regex_syntax";
         authors = [
           "The Rust Project Developers"
           "Andrew Gallant <jamslam@gmail.com>"
@@ -2672,6 +2698,7 @@ rec {
         version = "0.1.23";
         edition = "2015";
         sha256 = "0xnbk2bmyzshacjm2g1kd4zzv2y2az14bw3sjccq5qkpmsfvn9nn";
+        libName = "rustc_demangle";
         authors = [
           "Alex Crichton <alex@alexcrichton.com>"
         ];
@@ -2819,6 +2846,7 @@ rec {
         version = "1.0.6";
         edition = "2018";
         sha256 = "00h5j1w87dmhnvbv9l8bic3y7xxsnjmssvifw2ayvgx9mb1ivz4k";
+        libName = "same_file";
         authors = [
           "Andrew Gallant <jamslam@gmail.com>"
         ];
@@ -2971,6 +2999,7 @@ rec {
         version = "2.9.1";
         edition = "2018";
         sha256 = "1s0h8qhqnvy5a7m7gmnca2a2d5m5a4sz1hc26xfgxawqp7825q5n";
+        libName = "slog_term";
         authors = [
           "Dawid Ciężarkiewicz <dpc@dpc.pw>"
         ];
@@ -3071,6 +3100,7 @@ rec {
         edition = "2015";
         sha256 = "01sis9z5kqmyhvzbnmlzpdxcry99a0b9blypksgnhdsbm1hh40ak";
         procMacro = true;
+        libName = "structopt_derive";
         authors = [
           "Guillaume Pinot <texitoi@texitoi.eu>"
         ];
@@ -3289,6 +3319,7 @@ rec {
         edition = "2021";
         sha256 = "1xylyqcb8rv5yh2yf97hg4n4kg27qccc0ijafr1zqklrhahkn7y6";
         procMacro = true;
+        libName = "thiserror_impl";
         authors = [
           "David Tolnay <dtolnay@gmail.com>"
         ];
@@ -3331,9 +3362,9 @@ rec {
       };
       "time" = rec {
         crateName = "time";
-        version = "0.3.34";
+        version = "0.3.36";
         edition = "2021";
-        sha256 = "0jc7wgprzqjhzd0nqkbmdlnjwyddnswmjw86ni2vq55v45jqn968";
+        sha256 = "11g8hdpahgrf1wwl2rpsg5nxq3aj7ri6xr672v4qcij6cgjqizax";
         authors = [
           "Jacob Pratt <open-source@jhpratt.dev>"
           "Time contributors"
@@ -3414,6 +3445,7 @@ rec {
         version = "0.1.2";
         edition = "2021";
         sha256 = "1wx3qizcihw6z151hywfzzyd1y5dl804ydyxci6qm07vbakpr4pg";
+        libName = "time_core";
         authors = [
           "Jacob Pratt <open-source@jhpratt.dev>"
           "Time contributors"
@@ -3422,10 +3454,11 @@ rec {
       };
       "time-macros" = rec {
         crateName = "time-macros";
-        version = "0.2.17";
+        version = "0.2.18";
         edition = "2021";
-        sha256 = "0x3pahhk2751c6kqqq9dk6lz0gydbnxr44q01wpjlrz687ps78vv";
+        sha256 = "1kqwxvfh2jkpg38fy673d6danh1bhcmmbsmffww3mphgail2l99z";
         procMacro = true;
+        libName = "time_macros";
         authors = [
           "Jacob Pratt <open-source@jhpratt.dev>"
           "Time contributors"
@@ -3469,6 +3502,7 @@ rec {
         version = "1.0.12";
         edition = "2018";
         sha256 = "0jzf1znfpb2gx8nr8mvmyqs1crnv79l57nxnbiszc7xf7ynbjm1k";
+        libName = "unicode_ident";
         authors = [
           "David Tolnay <dtolnay@gmail.com>"
         ];
@@ -3479,6 +3513,7 @@ rec {
         version = "1.11.0";
         edition = "2018";
         sha256 = "00kjpwp1g8fqm45drmwivlacn3y9jx73bvs09n6s3x73nqi7vj6l";
+        libName = "unicode_segmentation";
         authors = [
           "kwantam <kwantam@gmail.com>"
           "Manish Goregaokar <manishsmail@gmail.com>"
@@ -3491,6 +3526,7 @@ rec {
         version = "0.1.11";
         edition = "2015";
         sha256 = "11ds4ydhg8g7l06rlmh712q41qsrd0j0h00n1jm74kww3kqk65z5";
+        libName = "unicode_width";
         authors = [
           "kwantam <kwantam@gmail.com>"
           "Manish Goregaokar <manishsmail@gmail.com>"
@@ -3508,6 +3544,7 @@ rec {
         version = "0.1.0";
         edition = "2015";
         sha256 = "1z57lqh4s18rr4x0j4fw4fmp9hf9346h0kmdgqsqx0fhjr3k0wpw";
+        libName = "unicode_xid";
         authors = [
           "erick.tryzelaar <erick.tryzelaar@gmail.com>"
           "kwantam <kwantam@gmail.com>"
@@ -3661,6 +3698,7 @@ rec {
         version = "0.4.0";
         edition = "2015";
         sha256 = "1dmpa6mvcvzz16zg6d5vrfy4bxgg541wxrcip7cnshi06v38ffxc";
+        libName = "winapi_i686_pc_windows_gnu";
         authors = [
           "Peter Atashian <retep998@gmail.com>"
         ];
@@ -3671,6 +3709,7 @@ rec {
         version = "0.1.6";
         edition = "2021";
         sha256 = "15i5lm39wd44004i9d5qspry2cynkrpvwzghr6s2c3dsk28nz7pj";
+        libName = "winapi_util";
         authors = [
           "Andrew Gallant <jamslam@gmail.com>"
         ];
@@ -3689,6 +3728,7 @@ rec {
         version = "0.4.0";
         edition = "2015";
         sha256 = "0gqq64czqb64kskjryj8isp62m2sgvx25yyj3kpc2myh85w24bki";
+        libName = "winapi_x86_64_pc_windows_gnu";
         authors = [
           "Peter Atashian <retep998@gmail.com>"
         ];
@@ -3699,6 +3739,7 @@ rec {
         version = "0.48.0";
         edition = "2018";
         sha256 = "1aan23v5gs7gya1lc46hqn9mdh8yph3fhxmhxlw36pn6pqc28zb7";
+        libName = "windows_sys";
         authors = [
           "Microsoft"
         ];
@@ -3992,6 +4033,7 @@ rec {
         version = "0.52.0";
         edition = "2021";
         sha256 = "0gd3v4ji88490zgb6b5mq5zgbvwv7zx1ibn8v3x83rwcdbryaar8";
+        libName = "windows_sys";
         authors = [
           "Microsoft"
         ];
@@ -4239,6 +4281,7 @@ rec {
         version = "0.48.5";
         edition = "2018";
         sha256 = "034ljxqshifs1lan89xwpcy1hp0lhdh4b5n0d2z4fwjx2piacbws";
+        libName = "windows_targets";
         authors = [
           "Microsoft"
         ];
@@ -4286,6 +4329,7 @@ rec {
         version = "0.52.4";
         edition = "2021";
         sha256 = "06sdd7fin3dj9cmlg6n1dw0n1l10jhn9b8ckz1cqf0drb9z7plvx";
+        libName = "windows_targets";
         authors = [
           "Microsoft"
         ];
