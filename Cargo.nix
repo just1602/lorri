@@ -1303,7 +1303,7 @@ rec {
       };
       "lorri" = rec {
         crateName = "lorri";
-        version = "1.7.0";
+        version = "1.7.1";
         edition = "2021";
         crateBin = [
           {
@@ -3331,9 +3331,9 @@ rec {
       };
       "time" = rec {
         crateName = "time";
-        version = "0.3.34";
+        version = "0.3.36";
         edition = "2021";
-        sha256 = "0jc7wgprzqjhzd0nqkbmdlnjwyddnswmjw86ni2vq55v45jqn968";
+        sha256 = "11g8hdpahgrf1wwl2rpsg5nxq3aj7ri6xr672v4qcij6cgjqizax";
         authors = [
           "Jacob Pratt <open-source@jhpratt.dev>"
           "Time contributors"
@@ -3422,9 +3422,9 @@ rec {
       };
       "time-macros" = rec {
         crateName = "time-macros";
-        version = "0.2.17";
+        version = "0.2.18";
         edition = "2021";
-        sha256 = "0x3pahhk2751c6kqqq9dk6lz0gydbnxr44q01wpjlrz687ps78vv";
+        sha256 = "1kqwxvfh2jkpg38fy673d6danh1bhcmmbsmffww3mphgail2l99z";
         procMacro = true;
         authors = [
           "Jacob Pratt <open-source@jhpratt.dev>"
