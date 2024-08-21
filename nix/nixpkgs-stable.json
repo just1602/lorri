@@ -1,6 +1,6 @@
 {
-  "nixpkgs-channel": "nixos-23.11",
-  "date": "Mi 3. Apr 16:47:34 UTC 2024",
-  "url": "https://github.com/nixos/nixpkgs/archive/219951b495fc2eac67b1456824cc1ec1fd2ee659.tar.gz",
-  "sha256": "065jy7qivlbdqmbvd7r9h97b23f21axmc4r7sqmq2h0j82rmymxv"
+  "nixpkgs-channel": "nixos-24.05",
+  "date": "Wed 21 Aug 2024 06:22:52 PM UTC",
+  "url": "https://github.com/nixos/nixpkgs/archive/f1bad50880bae73ff2d82fafc22010b4fc097a9c.tar.gz",
+  "sha256": "1q9cybyzfyrlj1hxz3znaf12i2gbx0j2qy5lbpp6glrz1j6z148g"
 }
