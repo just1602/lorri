@@ -609,7 +609,7 @@ PS1="(lorri) ${PS1}"
 }
 
 /// Options for the kinds of events to report
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum EventKind {
     /// Report only live events - those that happen after invocation
     Live,

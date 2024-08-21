@@ -22,23 +22,6 @@ tempfile = "3.1.0"
 anyhow = "1.0"
 thiserror = "1.0"
 
-# TODO: update to 0.3
-structopt.version = "0.2"
-
-# TODO: update to 0.3
-structopt.default-features = false
-
-# TODO: update to 0.3
-structopt.features = [
-  # "default",
-  "suggestions",
-  "color",
-  # "wrap_help",
-  # "yaml",
-  # "debug",
-  "no_cargo",
-  # "doc" (enables yaml)
-]
 # logging;
 slog = { version = "2.7.0", features = [
   "release_max_level_debug",
@@ -58,6 +41,7 @@ md5 = "0.7.0"
 vec1 = ">= 1.1.0, <1.7.0"
 human-panic = { path = "vendor/human-panic" }
 notify-debouncer-full = "0.3.1"
+clap = { version = "4.5.16", features = ["derive", "error-context"] }
 
 [dev-dependencies]
 # 1.0.0 requires at least rust 1.50

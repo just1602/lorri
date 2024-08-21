@@ -1,3 +1,4 @@
+use clap::Parser;
 use lorri::cli::{Arguments, Command, Internal_, Verbosity};
 use lorri::ops;
 use lorri::ops::error::ExitError;
@@ -7,7 +8,6 @@ use lorri::{logging, AbsDirPathBuf};
 use slog::{debug, error, o};
 use std::env;
 use std::path::Path;
-use structopt::StructOpt;
 
 use anyhow::anyhow;
 const TRIVIAL_SHELL_SRC: &str = include_str!("./trivial-shell.nix");
@@ -17,7 +17,7 @@ fn main() {
     install_panic_handler();
 
     let exit_code = {
-        let opts = Arguments::from_args();
+        let opts = Arguments::parse();
 
         let verbosity = match opts.verbosity {
             // -v flag was given 0 times
